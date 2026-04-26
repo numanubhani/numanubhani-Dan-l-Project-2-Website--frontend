@@ -1,0 +1,6 @@
+{
+  "name": "VPULSE",
+  "description": "Next-gen video platform blending short-form entertainment with prediction markets and creator tools.",
+  "requestFramePermissions": ["camera", "microphone", "display-capture"],
+  "majorCapabilities": ["video", "betting", "analytics"]
+}

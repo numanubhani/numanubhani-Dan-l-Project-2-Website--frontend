@@ -10,8 +10,8 @@ interface MarketCardProps {
 export const MarketCard: React.FC<MarketCardProps> = ({ market }) => {
   return (
     <motion.div 
-      whileHover={{ y: -5 }}
-      className="market-card group relative overflow-hidden rounded-[2rem] border border-white/5 bg-zinc-900/40 p-8 shadow-2xl transition-all hover:border-neon-cyan/20 hover:shadow-[0_0_30px_rgba(0,243,255,0.1)]"
+      whileHover={{ zIndex: 10 }}
+      className="market-card group relative overflow-hidden rounded-3xl border border-white/5 bg-zinc-900/40 p-8 shadow-2xl transition-all hover:border-neon-cyan/20 hover:shadow-[0_0_30px_rgba(0,243,255,0.1)] hover:z-10"
     >
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>

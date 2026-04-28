@@ -1,22 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { 
-  Home, 
-  Compass, 
-  Users, 
-  Radio, 
-  ShoppingBag, 
-  TrendingUp, 
-  PlusSquare, 
-  User, 
-  Bell, 
+import {
+  Home,
+  Compass,
+  Users,
+  Radio,
+  ShoppingBag,
+  TrendingUp,
+  PlusSquare,
+  User,
+  Bell,
   MoreVertical,
   LayoutDashboard,
   ShieldCheck,
   Search,
   Zap,
   Sun,
-  Moon
+  Moon,
+  CreditCard,
+  Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Toaster } from 'sonner';
@@ -27,15 +29,15 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export const Sidebar = ({ 
-  collapsed, 
-  onToggle 
-}: { 
-  collapsed: boolean; 
-  onToggle: () => void 
+export const Sidebar = ({
+  collapsed,
+  onToggle
+}: {
+  collapsed: boolean;
+  onToggle: () => void
 }) => {
   const location = useLocation();
-  
+
   const navItems = [
     { label: 'Home', icon: Home, path: '/' },
     { label: 'Explore', icon: Compass, path: '/explore' },
@@ -47,7 +49,7 @@ export const Sidebar = ({
 
   return (
     <aside className={cn(
-      "fixed left-0 top-0 hidden h-full flex-col border-r border-white/5 bg-void p-6 lg:flex z-50 transition-all duration-300",
+      "fixed left-0 top-0 hidden h-full flex-col border-r-2 border-neon-pink bg-void p-6 lg:flex z-50 transition-all duration-300",
       collapsed ? "w-24 items-center" : "w-64"
     )}>
       <div className="flex items-center justify-between mb-10 w-full">
@@ -57,7 +59,7 @@ export const Sidebar = ({
           </div>
           <span className="text-2xl font-black tracking-tighter text-white uppercase italic">VPULSE</span>
         </Link>
-        <button 
+        <button
           onClick={onToggle}
           className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-zinc-500 hover:text-neon-cyan"
         >
@@ -111,6 +113,9 @@ export const Sidebar = ({
   );
 };
 
+import { useAuth } from '../../contexts/AuthContext';
+import { LogOut } from 'lucide-react';
+
 export const TopBar = ({
   collapsed,
   onAddCoins,
@@ -122,11 +127,12 @@ export const TopBar = ({
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
 }) => {
+  const { user, logout } = useAuth();
   return (
     <header className="app-topbar sticky top-0 z-40 flex h-20 items-center justify-between border-b border-white/5 bg-void/80 px-4 backdrop-blur-xl lg:px-10">
       <div className="flex flex-1 items-center gap-4 lg:hidden">
         <Link to="/" className="flex items-center gap-2">
-           <div className="h-10 w-10 rounded-xl bg-neon-cyan flex items-center justify-center font-black text-black italic shadow-[0_0_15px_rgba(0,243,255,0.3)]">V</div>
+          <div className="h-10 w-10 rounded-xl bg-neon-cyan flex items-center justify-center font-black text-black italic shadow-[0_0_15px_rgba(0,243,255,0.3)]">V</div>
         </Link>
         <div className="h-10 w-[2px] bg-white/5" />
       </div>
@@ -134,9 +140,9 @@ export const TopBar = ({
       <div className="hidden max-w-xl flex-1 lg:block">
         <div className="relative group">
           <Search className="absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500 transition-colors group-focus-within:text-neon-cyan" />
-          <input 
-            type="text" 
-            placeholder="SEARCH CREATORS, STREAMS OR MARKETS..." 
+          <input
+            type="text"
+            placeholder="SEARCH CREATORS, STREAMS OR MARKETS..."
             className={cn(
               "top-search-input rounded-2xl bg-white/5 px-6 py-3.5 pl-12 text-[10px] font-black tracking-widest outline-none border border-white/5 focus:border-neon-cyan/30 focus:ring-0 transition-all text-white placeholder:text-zinc-600 uppercase w-full max-w-[450px]"
             )}
@@ -161,7 +167,7 @@ export const TopBar = ({
           Live
         </Link>
 
-        <div 
+        <div
           onClick={onAddCoins}
           className="top-wallet hidden md:flex items-center gap-3 bg-white/5 px-4 py-2.5 rounded-2xl border border-white/5 group cursor-pointer hover:border-white/20 transition-all"
         >
@@ -169,7 +175,7 @@ export const TopBar = ({
           <span className="top-wallet-amount text-xs font-black text-white tracking-widest">12,450.00</span>
           <button className="top-wallet-plus ml-2 text-neon-cyan font-black text-xl hover:scale-110 active:scale-90 transition-transform">+</button>
         </div>
-        
+
         <div className="flex items-center gap-4">
           <Link to="/stream/start" className="hidden md:flex items-center gap-2 px-6 py-2.5 rounded-2xl bg-neon-cyan text-black text-[10px] font-black uppercase tracking-widest shadow-[0_0_20px_rgba(0,243,255,0.2)] hover:brightness-110 transition-all">
             <Radio className="h-3 w-3 animate-pulse" />
@@ -183,15 +189,30 @@ export const TopBar = ({
             <span className="absolute top-3 right-3 w-2 h-2 bg-neon-pink rounded-full shadow-[0_0_10px_rgba(255,0,85,0.5)]"></span>
           </button>
 
-          <Link to="/profile" className="flex items-center gap-4 group">
-            <div className="w-12 h-12 rounded-2xl bg-zinc-800 border border-white/10 flex items-center justify-center font-bold text-white shadow-xl overflow-hidden group-hover:border-neon-purple transition-all">
-               <img src="https://picsum.photos/seed/user-me/200/200" alt="JD" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+          {user ? (
+            <div className="flex items-center gap-4">
+              <Link to="/profile" className="flex items-center gap-4 group">
+                <div className="w-12 h-12 rounded-2xl bg-zinc-800 border border-white/10 flex items-center justify-center font-bold text-white shadow-xl overflow-hidden group-hover:border-neon-purple transition-all">
+                  {user.avatar || user.avatar_url ? (
+                    <img src={user.avatar || user.avatar_url} alt={user.username} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                  ) : (
+                    <span className="uppercase text-lg">{user.username.charAt(0)}</span>
+                  )}
+                </div>
+                <div className="hidden lg:flex flex-col items-start leading-none gap-1">
+                  <span className="text-xs font-black text-white uppercase italic tracking-tighter">{user.username}</span>
+                  <span className="text-[8px] font-black text-neon-purple uppercase tracking-[0.2em] animate-pulse">Online</span>
+                </div>
+              </Link>
+              <button onClick={logout} className="p-2 rounded-xl text-zinc-500 hover:bg-white/5 hover:text-neon-pink transition-all">
+                <LogOut className="h-5 w-5" />
+              </button>
             </div>
-            <div className="hidden lg:flex flex-col items-start leading-none gap-1">
-               <span className="text-xs font-black text-white uppercase italic tracking-tighter">CREATOR-X</span>
-               <span className="text-[8px] font-black text-neon-purple uppercase tracking-[0.2em] animate-pulse">Online</span>
-            </div>
-          </Link>
+          ) : (
+            <Link to="/login" className="px-6 py-2.5 rounded-2xl bg-white text-black text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-xl">
+              Sign In
+            </Link>
+          )}
         </div>
       </div>
     </header>
@@ -213,9 +234,9 @@ export const MobileNav = () => {
       {navItems.map((item) => {
         const isActive = location.pathname === item.path;
         return (
-          <Link 
-            key={item.path} 
-            to={item.path} 
+          <Link
+            key={item.path}
+            to={item.path}
             className={cn(
               "flex flex-col items-center justify-center gap-1.5 transition-all active:scale-90",
               isActive ? "text-neon-cyan" : "text-zinc-600"
@@ -250,74 +271,99 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <div className="flex min-h-screen bg-void text-zinc-300 font-sans selection:bg-neon-cyan/30 selection:text-white overflow-x-hidden">
-      <Toaster 
-        richColors 
-        position="top-right" 
+      <Toaster
+        richColors
+        position="top-right"
         theme={theme}
         toastOptions={{
           className: 'bg-void border border-white/5 rounded-2xl shadow-2xl font-black uppercase tracking-widest text-[10px]',
         }}
       />
-      
+
       {/* Add Card Modal */}
       <AnimatePresence>
         {showAddCard && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               className="w-full max-w-md bg-void border border-white/10 rounded-[2.5rem] p-6 sm:p-10 space-y-8 shadow-2xl relative overflow-hidden"
             >
               <div className="flex justify-between items-start">
-                 <div className="space-y-1">
-                    <h2 className="text-2xl font-black text-white italic uppercase tracking-tighter">Injective Assets</h2>
-                    <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">Add payment method to start staking</p>
-                 </div>
-                 <button onClick={() => setShowAddCard(false)} className="p-2 rounded-xl hover:bg-white/5 text-zinc-500">
-                    <MoreVertical className="h-5 w-5" />
-                 </button>
+                <div className="space-y-1">
+                  <h2 className="text-2xl font-black text-white italic uppercase tracking-tighter">Injective Assets</h2>
+                  <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">Add payment method to start staking</p>
+                </div>
+                <button onClick={() => setShowAddCard(false)} className="p-2 rounded-xl hover:bg-white/5 text-zinc-500">
+                  <MoreVertical className="h-5 w-5" />
+                </button>
               </div>
 
-              <div className="space-y-4">
-                 <div className="p-6 rounded-2xl bg-white/5 border border-white/5 space-y-4">
-                    <div className="flex justify-between items-center">
-                       <span className="text-[8px] font-black text-neon-cyan uppercase tracking-widest">Secure Link</span>
-                       <ShieldCheck className="h-4 w-4 text-neon-cyan" />
-                    </div>
-                    <div className="space-y-2">
-                       <label className="text-[8px] font-black text-zinc-600 uppercase tracking-widest ml-1">Card Details</label>
-                       <div className="w-full h-14 bg-black/40 border border-white/10 rounded-xl px-4 flex items-center justify-between group-focus-within:border-neon-cyan transition-colors">
-                          <span className="text-xs font-mono text-zinc-500">**** **** **** 4242</span>
-                          <div className="flex gap-2">
-                             <div className="w-6 h-4 bg-red-500/20 rounded-sm" />
-                             <div className="w-6 h-4 bg-amber-500/20 rounded-sm" />
-                          </div>
-                       </div>
-                    </div>
-                 </div>
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  {/* Cardholder Name */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Name on Card</label>
+                    <input type="text" placeholder="John Doe" className="w-full h-12 bg-black/40 border border-white/10 rounded-xl px-4 text-white text-sm outline-none focus:border-neon-cyan transition-colors placeholder:text-zinc-600" />
+                  </div>
 
-                 <button className="w-full py-4 bg-neon-cyan text-black rounded-xl text-[10px] font-black uppercase tracking-[0.2em] shadow-[0_0_20px_rgba(0,243,255,0.2)] hover:scale-[1.02] active:scale-95 transition-all">
-                    CONFIRM ENCRYPTION
-                 </button>
-                 
-                 <button 
-                   onClick={() => setShowAddCard(false)}
-                   className="w-full py-4 bg-white/5 text-zinc-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all"
-                 >
-                    ABORT
-                 </button>
+                  {/* Card Number */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Card Number</label>
+                    <div className="relative">
+                      <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                      <input type="text" placeholder="0000 0000 0000 0000" className="w-full h-12 bg-black/40 border border-white/10 rounded-xl pl-11 pr-4 text-white font-mono text-sm outline-none focus:border-neon-cyan transition-colors placeholder:text-zinc-600 tracking-wider" />
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 flex">
+                        <div className="w-6 h-4 bg-red-500/80 rounded-full opacity-80" />
+                        <div className="w-6 h-4 bg-amber-500/80 rounded-full opacity-80 -ml-3 mix-blend-screen" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expiry & CVC */}
+                  <div className="flex gap-4">
+                    <div className="space-y-2 flex-1">
+                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Expiry Date</label>
+                      <input type="text" placeholder="MM/YY" className="w-full h-12 bg-black/40 border border-white/10 rounded-xl px-4 text-white font-mono text-sm outline-none focus:border-neon-cyan transition-colors placeholder:text-zinc-600 tracking-wider" />
+                    </div>
+                    <div className="space-y-2 flex-1">
+                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">CVC</label>
+                      <div className="relative">
+                        <input type="password" placeholder="123" maxLength={4} className="w-full h-12 bg-black/40 border border-white/10 rounded-xl px-4 text-white font-mono text-sm outline-none focus:border-neon-cyan transition-colors placeholder:text-zinc-600 tracking-widest" />
+                        <Lock className="absolute right-4 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 text-zinc-500 bg-white/5 p-3 rounded-xl border border-white/5">
+                  <ShieldCheck className="h-4 w-4 text-neon-cyan" />
+                  <span className="text-[9px] uppercase tracking-widest font-bold">Payments are secure and encrypted</span>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => setShowAddCard(false)}
+                    className="flex-1 py-3.5 bg-white/5 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all border border-white/10"
+                  >
+                    Cancel
+                  </button>
+                  <button className="flex-1 py-3.5 bg-neon-cyan text-black rounded-xl text-[10px] font-black uppercase tracking-[0.1em] shadow-[0_0_20px_rgba(0,243,255,0.2)] hover:scale-[1.02] active:scale-95 transition-all">
+                    Proceed Payment
+                  </button>
+                </div>
               </div>
-              
+
               <div className="absolute top-0 right-0 w-32 h-32 bg-neon-cyan/5 blur-3xl pointer-events-none" />
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      <Sidebar 
-        collapsed={isSidebarCollapsed} 
-        onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
+      <Sidebar
+        collapsed={isSidebarCollapsed}
+        onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
       <div className={cn(
         "flex flex-1 flex-col transition-all duration-300 min-w-0",

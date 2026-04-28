@@ -71,7 +71,7 @@ const Home = () => {
             </div>
           </div>
 
-          <div className="p-8 rounded-[2.5rem] bg-indigo-600/10 border border-indigo-500/20 shadow-2xl relative overflow-hidden group">
+          <div className="p-8 rounded-3xl bg-indigo-600/10 border border-indigo-500/20 shadow-2xl relative overflow-hidden group">
             <div className="relative z-10 space-y-6">
               <div className="h-10 w-10 rounded-xl bg-neon-purple flex items-center justify-center text-white shadow-lg">
                 <Zap className="h-6 w-6" />

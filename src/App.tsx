@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
 import { Layout } from './components/layout/RootLayout';
 import Home from './pages/Home';
 import VerticalFeed from './pages/VerticalFeed';
@@ -111,33 +112,38 @@ function cn(...inputs: any[]) {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        
-        <Route path="/" element={<Layout><Home /></Layout>} />
-        <Route path="/home" element={<Layout><Home /></Layout>} />
-        <Route path="/explore" element={<Layout><Explore /></Layout>} />
-        <Route path="/following" element={<Layout><Following /></Layout>} />
-        <Route path="/shop" element={<Layout><Shop /></Layout>} />
-        <Route path="/polymarket" element={<Layout><PredictionMarket /></Layout>} />
-        <Route path="/market" element={<Navigate to="/polymarket" replace />} />
-        
-        <Route path="/live" element={<Layout><LiveFeed /></Layout>} />
-        <Route path="/stream/start" element={<StreamSession />} />
-        
-        <Route path="/profile" element={<Layout><Profile /></Layout>} />
-        <Route path="/studio" element={<Layout><Studio /></Layout>} />
-        <Route path="/watch/:id" element={<Layout><Watch /></Layout>} />
-        
-        <Route path="/reel" element={<VerticalFeed />} />
-        <Route path="/feed" element={<VerticalFeed />} />
-        
-        <Route path="/creator" element={<Layout><CreatorDashboard /></Layout>} />
-        <Route path="/admin" element={<Layout><AdminPanel /></Layout>} />
-        
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          
+          <Route path="/" element={<Layout><Home /></Layout>} />
+          <Route path="/home" element={<Layout><Home /></Layout>} />
+          <Route path="/explore" element={<Layout><Explore /></Layout>} />
+          <Route path="/following" element={<Layout><Following /></Layout>} />
+          <Route path="/shop" element={<Layout><Shop /></Layout>} />
+          <Route path="/polymarket" element={<Layout><PredictionMarket /></Layout>} />
+          <Route path="/market" element={<Navigate to="/polymarket" replace />} />
+          
+          <Route path="/live" element={<Layout><LiveFeed /></Layout>} />
+          <Route path="/stream/start" element={<StreamSession />} />
+          
+          <Route path="/profile" element={<Layout><Profile /></Layout>} />
+          <Route path="/profile/:section" element={<Layout><Profile /></Layout>} />
+          <Route path="/profile/user/:id" element={<Layout><Profile /></Layout>} />
+          <Route path="/profile/user/:id/:section" element={<Layout><Profile /></Layout>} />
+          <Route path="/studio" element={<Layout><Studio /></Layout>} />
+          <Route path="/watch/:id" element={<Layout><Watch /></Layout>} />
+          
+          <Route path="/reel" element={<VerticalFeed />} />
+          <Route path="/feed" element={<VerticalFeed />} />
+          
+          <Route path="/creator" element={<Layout><CreatorDashboard /></Layout>} />
+          <Route path="/admin" element={<Layout><AdminPanel /></Layout>} />
+          
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

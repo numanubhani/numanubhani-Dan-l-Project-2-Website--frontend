@@ -1,222 +1,443 @@
-import React, { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { 
-  Heart, 
-  Share2, 
-  MoreVertical, 
-  MessageCircle, 
-  Play, 
-  Settings,
-  Zap,
-  TrendingUp,
-  ChevronDown
-} from 'lucide-react';
-import { mockVideos } from '../mockData';
-import { VideoCard } from '../components/common/VideoCard';
-import { motion, AnimatePresence } from 'motion/react';
-import { BetModal } from '../components/common/BetModal';
+import React, { useEffect, useRef, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { Bell, MessageSquare, Send, ThumbsUp, TrendingUp } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { toast } from 'sonner';
+import { api } from '../services/api';
 
 const Watch = () => {
   const { id } = useParams();
-  const video = mockVideos.find(v => v.id === id) || mockVideos[0];
-  const [isSubscribed, setIsSubscribed] = useState(false);
-  const [betActive, setBetActive] = useState(false);
-  const [activeMarketTitle, setActiveMarketTitle] = useState(video.title);
-  const [lastTriggeredBetId, setLastTriggeredBetId] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
-    const currentTime = e.currentTarget.currentTime;
-    
-    // Check for timed bets
-    if (video.betEvents) {
-      const activeBet = video.betEvents.find(
-        b => currentTime >= b.timestamp && currentTime <= b.timestamp + 1 && b.id !== lastTriggeredBetId
-      );
-      
-      if (activeBet) {
-        setLastTriggeredBetId(activeBet.id);
-        setActiveMarketTitle(activeBet.question);
-        setBetActive(true);
-        e.currentTarget.pause();
-      }
+  const [video, setVideo] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [comments, setComments] = useState<any[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [postingComment, setPostingComment] = useState(false);
+  const [stakeByMarker, setStakeByMarker] = useState<Record<string, string>>({});
+  const [placingBetKey, setPlacingBetKey] = useState<string | null>(null);
+  const [activeTimelineMarkerId, setActiveTimelineMarkerId] = useState<string | null>(null);
+  const [selectedOptionByMarker, setSelectedOptionByMarker] = useState<Record<string, string>>({});
+  const [triggeredMarkers, setTriggeredMarkers] = useState<Set<string>>(new Set());
+  const [isMobile, setIsMobile] = useState(false);
+
+  const isLive = !!video?.is_live;
+  const mediaUrl = video?.video_file_url || video?.video_url || '';
+  const markers = Array.isArray(video?.bet_markers) ? video.bet_markers : [];
+  const activeTimelineMarker = activeTimelineMarkerId
+    ? markers.find((marker: any) => marker.id === activeTimelineMarkerId) || null
+    : null;
+
+  useEffect(() => {
+    const updateViewport = () => setIsMobile(window.innerWidth < 1024);
+    updateViewport();
+    window.addEventListener('resize', updateViewport);
+    return () => window.removeEventListener('resize', updateViewport);
+  }, []);
+
+  const fetchComments = async (videoId: string) => {
+    try {
+      const response = await api.get(`/videos/${videoId}/comments/`);
+      setComments(response.data || []);
+    } catch (error) {
+      console.error('Failed to fetch comments', error);
     }
   };
 
+  useEffect(() => {
+    const loadWatchData = async () => {
+      if (!id) return;
+      try {
+        setLoading(true);
+        const response = await api.get(`/videos/${id}/`);
+        setVideo(response.data);
+        await fetchComments(id);
+      } catch (error) {
+        console.error('Failed to load video', error);
+        setVideo(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadWatchData();
+  }, [id]);
+
+  useEffect(() => {
+    if (!video?.id) return;
+    const timer = setTimeout(() => {
+      api.post(`/videos/${video.id}/view/`).catch(console.error);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [video?.id]);
+
+  const handleLike = async () => {
+    if (!video?.id) return;
+    const optimisticLiked = !video.has_liked;
+    setVideo((prev: any) => ({
+      ...prev,
+      has_liked: optimisticLiked,
+      likes: Math.max(0, (prev?.likes || 0) + (optimisticLiked ? 1 : -1)),
+    }));
+    try {
+      await api.post(`/videos/${video.id}/like/`);
+    } catch (error) {
+      console.error('Failed to like video', error);
+    }
+  };
+
+  const handlePostComment = async () => {
+    if (!video?.id || !newComment.trim()) return;
+    try {
+      setPostingComment(true);
+      const response = await api.post(`/videos/${video.id}/comments/`, { text: newComment.trim() });
+      setComments((prev) => [response.data, ...prev]);
+      setVideo((prev: any) => ({ ...prev, comments: (prev?.comments || 0) + 1 }));
+      setNewComment('');
+    } catch (error) {
+      console.error('Failed to post comment', error);
+      toast.error('Unable to post comment.');
+    } finally {
+      setPostingComment(false);
+    }
+  };
+
+  const handlePlaceMarkerBet = async (markerId: string, optionId: string) => {
+    const rawAmount = stakeByMarker[markerId];
+    const amount = Number(rawAmount);
+    if (!rawAmount || Number.isNaN(amount) || amount <= 0) {
+      toast.error('Enter a valid stake amount first.');
+      return false;
+    }
+
+    const key = `${markerId}:${optionId}`;
+    try {
+      setPlacingBetKey(key);
+      await api.post('/bets/place-marker/', {
+        marker_id: markerId,
+        option_id: optionId,
+        amount,
+      });
+      toast.success('Bet placed successfully.');
+      return true;
+    } catch (error: any) {
+      console.error('Failed to place marker bet', error);
+      const backendMessage =
+        error?.response?.data?.error ||
+        error?.response?.data?.detail ||
+        error?.response?.data?.message ||
+        'Failed to place bet.';
+      toast.error(backendMessage);
+      return false;
+    } finally {
+      setPlacingBetKey(null);
+    }
+  };
+
+  const handleVideoTimeUpdate = () => {
+    if (isLive || !videoRef.current || activeTimelineMarkerId) return;
+    const currentTime = videoRef.current.currentTime;
+    const nextMarker = markers.find((marker: any) => {
+      if (!marker?.id || triggeredMarkers.has(marker.id)) return false;
+      const triggerAt = Math.max(0, Number(marker.timestamp || 0) - 1);
+      return currentTime >= triggerAt;
+    });
+
+    if (nextMarker) {
+      videoRef.current.pause();
+      setActiveTimelineMarkerId(nextMarker.id);
+      setTriggeredMarkers((prev) => new Set(prev).add(nextMarker.id));
+    }
+  };
+
+  const handlePlaceBetForMarker = async (markerId: string) => {
+    const selectedOptionId = selectedOptionByMarker[markerId];
+    if (!selectedOptionId) {
+      toast.error('Select an option first.');
+      return;
+    }
+    const success = await handlePlaceMarkerBet(markerId, selectedOptionId);
+    if (success) {
+      setActiveTimelineMarkerId(null);
+      videoRef.current?.play().catch(() => null);
+    }
+  };
+
+  if (loading) {
+    return <div className="min-h-screen bg-void flex items-center justify-center text-zinc-300">Loading video...</div>;
+  }
+
+  if (!video) {
+    return <div className="min-h-screen bg-void flex items-center justify-center text-zinc-300">Video not found.</div>;
+  }
+
   return (
-    <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 p-3 sm:p-4 lg:p-10 bg-zinc-950 min-h-screen">
-      {/* Main Video Section */}
-      <div className="flex-1 space-y-8">
-        <div className="aspect-video w-full overflow-hidden rounded-[1.5rem] sm:rounded-[2rem] lg:rounded-[2.5rem] bg-black shadow-[0_0_50px_rgba(0,0,0,0.5)] relative group border border-white/5">
-          <video 
-            src={video.videoUrl} 
-            className="h-full w-full object-contain"
-            controls={!betActive}
-            autoPlay
-            muted={betActive}
-            onTimeUpdate={handleTimeUpdate}
-          />
-          {/* Active Bet Snippet Indicator */}
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="absolute top-3 right-3 sm:top-6 sm:right-6 z-10"
-          >
-            <button 
-              onClick={() => setBetActive(true)}
-              className="flex items-center gap-2 sm:gap-3 rounded-xl sm:rounded-2xl bg-black/40 px-3 sm:px-6 py-2 sm:py-3 backdrop-blur-xl border border-neon-cyan/30 hover:border-neon-cyan hover:bg-black/60 transition-all group/bet"
-            >
-              <TrendingUp className="h-5 w-5 text-neon-cyan animate-pulse group-hover/bet:scale-110 transition-transform" />
-              <span className="text-[10px] sm:text-xs font-black uppercase tracking-[0.14em] sm:tracking-[0.2em] text-white">Live Market</span>
-            </button>
-          </motion.div>
+    <div className="flex flex-col lg:flex-row gap-6 p-4 lg:p-8 bg-void min-h-screen font-sans text-white">
+      <div className="flex-1 space-y-6">
+        <div className="relative aspect-video w-full rounded-2xl bg-black overflow-hidden border border-white/5">
+          {mediaUrl ? (
+            <video
+              ref={videoRef}
+              src={mediaUrl}
+              className="h-full w-full object-contain bg-black"
+              controls={!isLive}
+              autoPlay={isLive}
+              playsInline
+              onTimeUpdate={handleVideoTimeUpdate}
+              onPlay={() => {
+                if (activeTimelineMarkerId) {
+                  videoRef.current?.pause();
+                }
+              }}
+            />
+          ) : (
+            <div className="h-full w-full flex items-center justify-center text-zinc-500">No video source found.</div>
+          )}
+          {isLive && (
+            <div className="absolute top-4 left-4 bg-neon-pink text-white text-[10px] tracking-widest font-bold px-3 py-1 rounded uppercase shadow-[0_0_15px_rgba(255,0,183,0.5)] animate-pulse">
+              LIVE
+            </div>
+          )}
         </div>
 
-        <div className="space-y-6">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-6">
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tighter leading-tight lg:leading-none text-white uppercase italic break-words">
-              {video.title}
-            </h1>
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-              <button className="flex items-center gap-2 rounded-xl sm:rounded-2xl bg-white/5 px-3 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-sm font-black uppercase tracking-[0.14em] sm:tracking-widest hover:border-neon-pink/50 border border-transparent transition-all group">
-                <Heart className="h-5 w-5 group-hover:text-neon-pink group-hover:fill-neon-pink transition-all" />
-                {video.likes}
-              </button>
-              <button className="flex items-center gap-2 rounded-xl sm:rounded-2xl bg-white/5 px-3 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-sm font-black uppercase tracking-[0.14em] sm:tracking-widest hover:border-neon-cyan/50 border border-transparent transition-all">
-                <Share2 className="h-5 w-5" />
-                Share
-              </button>
-              <button className="rounded-xl sm:rounded-2xl bg-white/5 p-2.5 sm:p-3 hover:bg-white/10 border border-transparent hover:border-white/10 transition-all">
-                <MoreVertical className="h-6 w-6 text-zinc-500" />
-              </button>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl sm:rounded-3xl bg-white/5 p-4 sm:p-6 border border-white/5 shadow-xl">
-            <div className="flex items-center gap-3 sm:gap-5 min-w-0">
-              <Link to="/profile" className="h-12 w-12 sm:h-14 sm:w-14 overflow-hidden rounded-xl sm:rounded-2xl border-2 border-white/10 shadow-lg group flex-shrink-0">
-                <img src={video.creator.avatar} alt="Creator" className="h-full w-full object-cover group-hover:scale-110 transition-transform" />
-              </Link>
-              <div className="flex flex-col min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-black text-base sm:text-xl hover:text-neon-cyan transition-colors italic tracking-tight truncate">{video.creator.username}</span>
-                  {video.creator.isVerified && <Zap className="h-5 w-5 text-neon-cyan fill-neon-cyan animate-pulse shadow-[0_0_10px_rgba(0,243,255,0.5)]" />}
-                </div>
-                <span className="text-[9px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-[0.14em] sm:tracking-[0.2em] mt-1">{(video.creator.followers / 1000).toFixed(1)}K SUBSCRIBERS</span>
-              </div>
-            </div>
-            <button 
-              onClick={() => setIsSubscribed(!isSubscribed)}
-              className={`w-full sm:w-auto rounded-xl sm:rounded-2xl px-5 sm:px-10 py-3 text-[10px] sm:text-xs font-black uppercase tracking-[0.14em] sm:tracking-[0.2em] transition-all active:scale-95 shadow-2xl ${
-                isSubscribed 
-                  ? "bg-white/5 text-zinc-400 border border-white/10" 
-                  : "bg-neon-cyan text-black shadow-[0_0_20px_rgba(0,243,255,0.3)] hover:brightness-110"
-              }`}
-            >
-              {isSubscribed ? "Subscribed" : "Subscribe"}
-            </button>
-          </div>
-
-          <div className="rounded-2xl sm:rounded-3xl bg-white/5 p-4 sm:p-6 border border-white/5 space-y-5 sm:space-y-6 relative overflow-hidden">
-             <div className="absolute top-0 right-0 p-6 opacity-5 pointer-events-none">
-                <TrendingUp className="h-32 w-32 text-neon-cyan" />
-             </div>
-            <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-[10px] sm:text-xs font-black uppercase tracking-[0.14em] sm:tracking-widest text-zinc-500">
-              <span className="flex items-center gap-2"><Play className="h-3 w-3" /> {(video.views / 1000).toFixed(1)}K Views</span>
-              <span className="hidden sm:inline">•</span>
-              <span>Uploaded: {video.createdAt}</span>
-            </div>
-            <p className="text-zinc-400 leading-relaxed max-w-4xl text-sm font-medium">
-              {video.description}
+        <div className="space-y-4">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-white mb-2 leading-tight">{video.title}</h1>
+            <p className="text-sm text-zinc-400">
+              {isLive ? 'Live stream' : 'Uploaded video'} - {video.views || 0} views
             </p>
-            <div className="flex flex-wrap gap-3">
-              {['#NEON', '#ALPHA', '#VPULSE', '#CRYPTO'].map(tag => (
-                <span key={tag} className="text-[10px] font-black text-neon-cyan px-3 py-1 bg-neon-cyan/10 rounded-lg border border-neon-cyan/20 hover:bg-neon-cyan hover:text-black transition-all cursor-pointer tracking-widest">{tag}</span>
-              ))}
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 pb-6 border-b border-white/10">
+            <div className="flex items-center gap-4">
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full overflow-hidden bg-zinc-900">
+                {video.creator_avatar ? (
+                  <img src={video.creator_avatar} alt={video.creator_name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="h-full w-full bg-gradient-to-br from-neon-purple to-neon-pink" />
+                )}
+              </div>
+              <div className="flex flex-col">
+                <span className="font-bold text-white text-sm">{video.creator_name || 'Creator'}</span>
+              </div>
+              <button className="ml-2 sm:ml-4 bg-white text-black px-4 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold text-sm hover:bg-zinc-200 transition flex items-center gap-2">
+                <Bell className="h-4 w-4" />
+                Subscribe
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-3">
+              <button onClick={handleLike} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10">
+                <ThumbsUp className={`h-4 w-4 ${video.has_liked ? 'text-neon-cyan' : 'text-white'}`} />
+                <span className="text-sm font-bold">{video.likes || 0}</span>
+              </button>
+              <div className="text-sm text-zinc-400">{video.comments || 0} comments</div>
             </div>
           </div>
         </div>
 
-        {/* Mock Comments View */}
-        <div className="space-y-6 sm:space-y-8 pt-8 sm:pt-10 border-t border-white/5">
-           <div className="flex items-center gap-4">
-              <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tighter italic">{video.comments} Comments</h2>
-              <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-black uppercase tracking-widest bg-white/5 px-3 py-1.5 rounded-xl border border-white/5">
-                 <ChevronDown className="h-4 w-4" />
-                 LATEST
-              </div>
-           </div>
-           
-           <div className="flex gap-3 sm:gap-5">
-              <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-xl">
-                <img src="https://picsum.photos/seed/operative/100/100" alt="Me" className="h-full w-full object-cover" />
-              </div>
-              <div className="flex-1 space-y-4">
-                <input placeholder="Add a comment..." className="w-full bg-white/5 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-xs sm:text-sm outline-none border border-white/10 focus:border-neon-cyan/30 transition-all uppercase font-black tracking-[0.16em] sm:tracking-widest placeholder:text-zinc-600" />
-                <div className="flex justify-end gap-4">
-                   <button className="text-xs font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-colors">Discard</button>
-                   <button className="rounded-xl bg-white/10 px-6 py-2 text-xs font-black uppercase tracking-widest text-zinc-400 border border-white/10 hover:border-neon-cyan/30 transition-all">Comment</button>
+        <div className="bg-white/5 border border-white/5 rounded-xl p-4 sm:p-5 mt-4">
+          <div className="text-white text-sm mb-1 font-medium">{video.description || 'No description available.'}</div>
+        </div>
+
+        <div className="pt-4">
+          <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+            <MessageSquare className="h-5 w-5 text-neon-cyan" />
+            {comments.length} Comments
+          </h3>
+          <div className="flex gap-3 mb-6">
+            <input
+              type="text"
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handlePostComment()}
+              placeholder="Add a comment..."
+              className="flex-1 bg-transparent border-b border-white/20 pb-2 text-sm text-white focus:outline-none focus:border-neon-cyan transition-colors"
+            />
+            <button
+              onClick={handlePostComment}
+              disabled={postingComment || !newComment.trim()}
+              className="px-4 py-2 rounded-lg bg-neon-cyan text-black text-xs font-black uppercase tracking-wider disabled:opacity-50"
+            >
+              <Send className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {comments.map((item) => (
+              <div key={item.id} className="flex gap-3">
+                <img src={item.user_avatar} alt={item.user_username} className="w-9 h-9 rounded-full object-cover" />
+                <div>
+                  <div className="text-sm font-bold text-white">@{item.user_username}</div>
+                  <div className="text-sm text-zinc-300">{item.text}</div>
                 </div>
               </div>
-           </div>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Sidebar - Related Content */}
-      <aside className="w-full lg:w-[450px] space-y-8 sm:space-y-10">
-        <div className="space-y-6">
-           <h3 className="text-xl font-black uppercase tracking-tighter italic flex items-center gap-3">
-              <Zap className="h-5 w-5 text-neon-purple fill-neon-purple" />
-              Watch Next
-           </h3>
-           <div className="space-y-6">
-             {mockVideos.filter(v => v.id !== id).slice(0, 6).map(v => (
-               <VideoCard key={v.id} video={v} horizontal />
-             ))}
-           </div>
+      <aside className="hidden lg:block lg:w-[380px] flex-shrink-0 space-y-6 max-h-[calc(100vh-6rem)] overflow-y-auto no-scrollbar pb-10">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-5 w-5 text-neon-cyan" />
+          <h2 className="text-lg font-bold text-white">Timeline Bets</h2>
         </div>
 
-        {/* Prediction Market Promotion */}
-        <div className="rounded-[1.5rem] sm:rounded-[2rem] bg-gradient-to-br from-zinc-900 to-black border border-neon-cyan/20 p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-2xl relative overflow-hidden group">
-           <div className="relative z-10 space-y-5">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-neon-cyan/10 flex items-center justify-center border border-neon-cyan/30">
-                   <TrendingUp className="h-6 w-6 text-neon-cyan" />
-                </div>
-                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-neon-cyan">Market Intelligence</span>
-              </div>
-              <p className="font-black text-lg sm:text-xl leading-tight sm:leading-none uppercase tracking-tighter italic">Will this stream hit 100k Pulses before end of cycle?</p>
-              <div className="space-y-2">
-                <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
-                   <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: "65%" }}
-                    className="h-full bg-neon-cyan shadow-[0_0_15px_rgba(0,243,255,0.5)]" />
-                </div>
-                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-zinc-500">
-                  <span className="text-neon-cyan">YES: 65%</span>
-                  <span>NO: 35%</span>
-                </div>
-              </div>
-              <button 
-                onClick={() => setBetActive(true)}
-                className="w-full py-4 rounded-2xl bg-white text-black text-xs font-black uppercase tracking-[0.2em] transition-all hover:scale-[1.02] shadow-[0_10px_20px_rgba(0,0,0,0.4)] active:scale-95"
+        {markers.length === 0 ? (
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-400">
+            No timeline bets were added for this video.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {markers.map((marker: any) => (
+              <motion.div
+                key={marker.id}
+                initial={false}
+                animate={
+                  activeTimelineMarkerId === marker.id
+                    ? { scale: [1, 1.02, 1], boxShadow: '0 0 30px rgba(0,243,255,0.25)' }
+                    : { scale: 1, boxShadow: '0 0 0 rgba(0,0,0,0)' }
+                }
+                transition={{ duration: 0.45 }}
+                className={`rounded-xl border p-4 space-y-3 ${
+                  activeTimelineMarkerId === marker.id
+                    ? 'border-neon-cyan bg-neon-cyan/10'
+                    : 'border-white/10 bg-white/5'
+                }`}
               >
-                 EXECUTE POSITION
-              </button>
-           </div>
-           <div className="absolute -bottom-10 -right-10 h-40 w-40 bg-neon-cyan blur-[100px] opacity-10 group-hover:opacity-20 transition-opacity" />
-        </div>
+                <div className="text-[10px] uppercase tracking-widest text-neon-cyan font-black">
+                  At {Number(marker.timestamp || 0).toFixed(1)}s
+                </div>
+                <div className="text-sm font-bold text-white">{marker.question}</div>
+                {activeTimelineMarkerId === marker.id && (
+                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-neon-cyan animate-pulse">
+                    Bet triggered - video paused
+                  </div>
+                )}
+                <input
+                  type="number"
+                  min="1"
+                  value={stakeByMarker[marker.id] || ''}
+                  onChange={(e) =>
+                    setStakeByMarker((prev) => ({
+                      ...prev,
+                      [marker.id]: e.target.value,
+                    }))
+                  }
+                  placeholder="Enter stake amount"
+                  className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-neon-cyan"
+                />
+                <div className="grid grid-cols-1 gap-2">
+                  {(marker.options || []).map((option: any) => {
+                    const key = `${marker.id}:${option.id}`;
+                    return (
+                      <button
+                        key={option.id}
+                        onClick={() =>
+                          setSelectedOptionByMarker((prev) => ({
+                            ...prev,
+                            [marker.id]: option.id,
+                          }))
+                        }
+                        disabled={placingBetKey === key}
+                        className={`w-full flex items-center justify-between bg-black/20 hover:bg-black/40 transition rounded-lg p-3 border text-left disabled:opacity-50 ${
+                          selectedOptionByMarker[marker.id] === option.id ? 'border-neon-cyan' : 'border-white/10'
+                        }`}
+                      >
+                        <span className="text-sm font-bold text-zinc-200">{option.text}</span>
+                        <span className="text-xs font-black text-neon-cyan">x{Number(option.odds || 0).toFixed(2)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => handlePlaceBetForMarker(marker.id)}
+                  disabled={!selectedOptionByMarker[marker.id] || placingBetKey?.startsWith(`${marker.id}:`)}
+                  className="w-full py-2 rounded-lg bg-neon-cyan text-black text-xs font-black uppercase tracking-widest disabled:opacity-50"
+                >
+                  Place Bet
+                </button>
+              </motion.div>
+            ))}
+          </div>
+        )}
       </aside>
 
-      {/* High-Fidelity Bet Modal */}
-      <BetModal 
-        isOpen={betActive} 
-        onClose={() => setBetActive(false)} 
-        marketTitle={activeMarketTitle} 
-        isMandatory={false}
-      />
+      <AnimatePresence>
+        {isMobile && activeTimelineMarker && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[140] bg-black/70 backdrop-blur-sm flex items-end"
+          >
+            <motion.div
+              initial={{ y: 40, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 40, opacity: 0 }}
+              className="w-full rounded-t-3xl border-t border-white/10 bg-zinc-950 p-5 space-y-4"
+            >
+              <div className="text-[10px] uppercase tracking-[0.2em] text-neon-cyan font-black">
+                Timeline Bet Triggered - video paused
+              </div>
+              <h3 className="text-base font-black text-white">{activeTimelineMarker.question}</h3>
+              <p className="text-xs text-zinc-400">
+                Marker at {Number(activeTimelineMarker.timestamp || 0).toFixed(1)}s. Place bet to continue playback.
+              </p>
+
+              <div className="space-y-2">
+                {(activeTimelineMarker.options || []).map((option: any) => (
+                  <button
+                    key={option.id}
+                    onClick={() =>
+                      setSelectedOptionByMarker((prev) => ({
+                        ...prev,
+                        [activeTimelineMarker.id]: option.id,
+                      }))
+                    }
+                    className={`w-full flex items-center justify-between rounded-lg border px-3 py-2 text-left ${
+                      selectedOptionByMarker[activeTimelineMarker.id] === option.id
+                        ? 'border-neon-cyan bg-neon-cyan/10'
+                        : 'border-white/10 bg-white/5'
+                    }`}
+                  >
+                    <span className="text-sm font-bold text-zinc-100">{option.text}</span>
+                    <span className="text-xs font-black text-neon-cyan">x{Number(option.odds || 0).toFixed(2)}</span>
+                  </button>
+                ))}
+              </div>
+
+              <input
+                type="number"
+                min="1"
+                value={stakeByMarker[activeTimelineMarker.id] || ''}
+                onChange={(e) =>
+                  setStakeByMarker((prev) => ({
+                    ...prev,
+                    [activeTimelineMarker.id]: e.target.value,
+                  }))
+                }
+                placeholder="Enter stake amount"
+                className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-neon-cyan"
+              />
+
+              <button
+                onClick={() => handlePlaceBetForMarker(activeTimelineMarker.id)}
+                disabled={
+                  !selectedOptionByMarker[activeTimelineMarker.id] ||
+                  !stakeByMarker[activeTimelineMarker.id] ||
+                  placingBetKey?.startsWith(`${activeTimelineMarker.id}:`)
+                }
+                className="w-full py-3 rounded-lg bg-neon-cyan text-black text-xs font-black uppercase tracking-widest disabled:opacity-50"
+              >
+                Place Bet
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
 
 export default Watch;
+

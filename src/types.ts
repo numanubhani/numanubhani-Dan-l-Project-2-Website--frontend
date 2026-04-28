@@ -4,6 +4,7 @@ export interface User {
   id: string;
   username: string;
   avatar: string;
+  avatar_url?: string;
   isVerified: boolean;
   isLive?: boolean;
   followers: number;

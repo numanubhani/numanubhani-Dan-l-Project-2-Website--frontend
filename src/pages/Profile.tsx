@@ -1,34 +1,251 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { 
   Grid, 
   Play, 
   ShoppingBag, 
   TrendingUp, 
-  Mail, 
+  MoreVertical,
   Settings,
   Edit2,
   Users,
-  Plus
+  Plus,
+  Heart,
+  Trash2,
 } from 'lucide-react';
-import { mockUser, mockVideos } from '../mockData';
 import { VideoCard } from '../components/common/VideoCard';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
+import { api } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import { toast } from 'sonner';
 
 function cn(...inputs: any[]) {
   return inputs.filter(Boolean).join(' ');
 }
 
 const Profile = () => {
-  const [activeTab, setActiveTab] = useState<'videos' | 'reels' | 'markets' | 'shop'>('videos');
-  const userVideos = mockVideos.filter(v => v.type === 'long');
-  const userReels = mockVideos.filter(v => v.type === 'short');
+  const { id, section } = useParams();
+  const navigate = useNavigate();
+  const { user: currentUser, refreshProfile } = useAuth();
+  
+  const [activeTab, setActiveTab] = useState<'videos' | 'reels' | 'markets' | 'stores'>('videos');
+  const [profileData, setProfileData] = useState<any>(null);
+  const [userVideos, setUserVideos] = useState<any[]>([]);
+  const [userReels, setUserReels] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [openVideoMenuId, setOpenVideoMenuId] = useState<string | null>(null);
+  const [openReelMenuId, setOpenReelMenuId] = useState<string | null>(null);
+  const [deletingReelId, setDeletingReelId] = useState<string | null>(null);
+  const [reelToDeleteId, setReelToDeleteId] = useState<string | null>(null);
+  const [videoToDeleteId, setVideoToDeleteId] = useState<string | null>(null);
+  const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
+  const [editingVideo, setEditingVideo] = useState<any | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editThumbnailFile, setEditThumbnailFile] = useState<File | null>(null);
+  const [editThumbnailPreview, setEditThumbnailPreview] = useState<string | null>(null);
+  const [savingVideoEdit, setSavingVideoEdit] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  // If no ID is provided, assume it's the current user's profile
+  const targetId = id || currentUser?.id;
+  const isOwnProfile = currentUser && currentUser.id === targetId;
+  const validSections = new Set(['videos', 'reels', 'markets', 'stores']);
+
+  useEffect(() => {
+    const normalizedSection = section?.toLowerCase();
+    if (!normalizedSection) {
+      setActiveTab('videos');
+      return;
+    }
+    if (validSections.has(normalizedSection)) {
+      setActiveTab(normalizedSection as 'videos' | 'reels' | 'markets' | 'stores');
+      return;
+    }
+    const basePath = id ? `/profile/user/${id}` : '/profile';
+    navigate(`${basePath}/videos`, { replace: true });
+  }, [section, id, navigate]);
+
+  useEffect(() => {
+    const fetchProfileData = async () => {
+      if (!targetId) return;
+      
+      try {
+        setLoading(true);
+        // Fetch user profile
+        if (isOwnProfile) {
+          const profileRes = await api.get('/profile/me/');
+          setProfileData(profileRes.data);
+        } else {
+          const profileRes = await api.get(`/profile/${targetId}/`);
+          setProfileData(profileRes.data);
+        }
+
+        // Fetch videos and reels
+        const videosRes = await api.get(`/videos/user/${targetId}/?type=videos`);
+        setUserVideos(videosRes.data);
+        
+        const reelsRes = await api.get(`/videos/user/${targetId}/?type=reels`);
+        setUserReels(reelsRes.data);
+        
+      } catch (error) {
+        console.error("Failed to load profile data", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfileData();
+  }, [targetId, isOwnProfile]);
+
+  if (loading) {
+     return <div className="min-h-screen bg-void flex items-center justify-center"><div className="h-8 w-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin" /></div>;
+  }
+
+  if (!profileData) {
+     return <div className="min-h-screen bg-void flex items-center justify-center text-white">User not found.</div>;
+  }
 
   const stats = [
-    { label: 'Subscribers', value: '12.5K', icon: Users },
-    { label: 'Following', value: '450', icon: Users },
-    { label: 'Pulse Balance', value: `$${mockUser.balance.toLocaleString()}`, icon: TrendingUp },
+    { label: 'Subscribers', value: profileData.followers_count || '0', icon: Users },
+    { label: 'Following', value: profileData.following_count || '0', icon: Users },
+    { label: 'Pulse Balance', value: `$${(profileData.balance || 0).toLocaleString()}`, icon: TrendingUp },
   ];
+
+  const handleAvatarPick = () => {
+    if (!isOwnProfile || uploadingAvatar) return;
+    avatarInputRef.current?.click();
+  };
+
+  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select a valid image file.');
+      event.target.value = '';
+      return;
+    }
+
+    try {
+      setUploadingAvatar(true);
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      const response = await api.patch('/profile/update/', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      setProfileData(response.data);
+      await refreshProfile();
+      toast.success('Profile image updated.');
+    } catch (error) {
+      console.error('Failed to upload avatar', error);
+      toast.error('Failed to upload profile image.');
+    } finally {
+      setUploadingAvatar(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleDeleteReel = async (reelId: string) => {
+    try {
+      setDeletingReelId(reelId);
+      await api.delete(`/videos/${reelId}/`);
+      setUserReels((prev) => prev.filter((item) => item.id !== reelId));
+      toast.success('Reel deleted successfully.');
+    } catch (error) {
+      console.error('Failed to delete reel', error);
+      toast.error('Failed to delete reel.');
+    } finally {
+      setDeletingReelId(null);
+      setOpenReelMenuId(null);
+      setReelToDeleteId(null);
+    }
+  };
+
+  const handleDeleteVideo = async (videoId: string) => {
+    try {
+      setDeletingVideoId(videoId);
+      await api.delete(`/videos/${videoId}/`);
+      setUserVideos((prev) => prev.filter((item) => item.id !== videoId));
+      toast.success('Video deleted successfully.');
+    } catch (error) {
+      console.error('Failed to delete video', error);
+      toast.error('Failed to delete video.');
+    } finally {
+      setDeletingVideoId(null);
+      setVideoToDeleteId(null);
+      setOpenVideoMenuId(null);
+    }
+  };
+
+  const openVideoEditor = (video: any) => {
+    setEditingVideo(video);
+    setEditTitle(video?.title || '');
+    setEditDescription(video?.description || '');
+    setEditThumbnailFile(null);
+    setEditThumbnailPreview(video?.thumbnail_url || video?.thumbnail || null);
+  };
+
+  const closeVideoEditor = () => {
+    if (savingVideoEdit) return;
+    setEditingVideo(null);
+    setEditTitle('');
+    setEditDescription('');
+    setEditThumbnailFile(null);
+    setEditThumbnailPreview(null);
+  };
+
+  const handleEditThumbnailChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select a valid image file.');
+      return;
+    }
+    setEditThumbnailFile(file);
+    setEditThumbnailPreview(URL.createObjectURL(file));
+  };
+
+  const handleSaveVideoEdit = async () => {
+    if (!editingVideo?.id) return;
+    if (!editTitle.trim()) {
+      toast.error('Title is required.');
+      return;
+    }
+
+    try {
+      setSavingVideoEdit(true);
+      const formData = new FormData();
+      formData.append('title', editTitle.trim());
+      formData.append('description', editDescription);
+      if (editThumbnailFile) {
+        formData.append('thumbnail', editThumbnailFile);
+      }
+
+      const response = await api.patch(`/videos/${editingVideo.id}/`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      setUserVideos((prev) => prev.map((item) => (item.id === editingVideo.id ? response.data : item)));
+      toast.success('Video updated successfully.');
+      closeVideoEditor();
+    } catch (error: any) {
+      console.error('Failed to update video', error);
+      const message =
+        error?.response?.data?.error ||
+        error?.response?.data?.detail ||
+        'Failed to update video.';
+      toast.error(message);
+    } finally {
+      setSavingVideoEdit(false);
+    }
+  };
 
   return (
     <div className="min-h-screen">
@@ -44,23 +261,36 @@ const Profile = () => {
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8 pb-10 border-b border-white/5">
           <div className="flex flex-col lg:flex-row items-center lg:items-center gap-8 text-center lg:text-left">
             <div className="relative group">
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarChange}
+              />
               <div className="h-32 w-32 lg:h-48 lg:w-48 overflow-hidden rounded-[2.5rem] border-4 border-void shadow-[0_0_30px_rgba(0,0,0,0.5)] bg-zinc-900 ring-1 ring-white/10 group-hover:border-neon-cyan transition-all duration-500">
-                <img src={mockUser.avatar} alt="Me" className="h-full w-full object-cover transition-transform group-hover:scale-110 opacity-80 group-hover:opacity-100" referrerPolicy="no-referrer" />
+                <img src={profileData.avatar_url || `https://ui-avatars.com/api/?name=${profileData.username}&background=random`} alt="Avatar" className="h-full w-full object-cover transition-transform group-hover:scale-110 opacity-80 group-hover:opacity-100" referrerPolicy="no-referrer" />
               </div>
-              <button className="absolute -bottom-2 -right-2 rounded-xl bg-neon-cyan p-3 text-black shadow-2xl hover:scale-110 active:scale-95 transition-all">
-                <Edit2 className="h-5 w-5" />
-              </button>
+              {isOwnProfile && (
+                <button
+                  onClick={handleAvatarPick}
+                  disabled={uploadingAvatar}
+                  className="absolute -bottom-2 -right-2 rounded-xl bg-neon-cyan p-3 text-black shadow-2xl hover:scale-110 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <Edit2 className="h-5 w-5" />
+                </button>
+              )}
             </div>
 
             <div className="space-y-4">
               <div className="flex flex-col lg:flex-row items-center gap-4">
-                <h1 className="text-4xl lg:text-5xl font-black tracking-tighter text-white uppercase italic leading-none">{mockUser.username}</h1>
+                <h1 className="text-4xl lg:text-5xl font-black tracking-tighter text-white uppercase italic leading-none">{profileData.username}</h1>
                 <div className="flex items-center gap-2 bg-neon-cyan/10 border border-neon-cyan/20 px-3 py-1 rounded-lg">
                   <div className="h-2 w-2 rounded-full bg-neon-cyan animate-pulse" />
                   <span className="text-[10px] font-black text-neon-cyan uppercase tracking-widest">VERIFIED-X</span>
                 </div>
               </div>
-              <p className="text-zinc-500 font-bold max-w-sm text-xs md:text-sm uppercase tracking-tight leading-relaxed">{mockUser.bio}</p>
+              <p className="text-zinc-500 font-bold max-w-sm text-xs md:text-sm uppercase tracking-tight leading-relaxed">{profileData.bio || "No bio available."}</p>
               
               <div className="flex justify-center lg:justify-start gap-8 pt-2">
                  {stats.map((stat, i) => (
@@ -74,44 +304,53 @@ const Profile = () => {
           </div>
 
           <div className="flex flex-wrap items-center justify-center lg:justify-end gap-3 lg:gap-4">
-             <Link to="/studio" className="flex items-center gap-3 rounded-2xl bg-neon-cyan px-6 lg:px-8 py-3 lg:py-4 text-[10px] font-black text-black transition-all hover:brightness-110 active:scale-95 uppercase tracking-widest shadow-[0_0_20px_rgba(0,243,255,0.3)]">
-               <Plus className="h-4 w-4" />
-               CREATOR STUDIO
-             </Link>
-             <button className="flex items-center gap-3 rounded-2xl bg-white/5 border border-white/10 px-5 lg:px-6 py-3 lg:py-4 text-[10px] font-black text-white hover:bg-white/10 active:scale-95 uppercase tracking-widest transition-all">
-               <Edit2 className="h-4 w-4" />
-               SYSTEM CONFIG
-             </button>
-             <div className="flex gap-3">
-               <button className="rounded-2xl bg-white/5 p-3 lg:p-4 border border-white/10 hover:bg-white/10 transition-all text-zinc-400 hover:text-white">
-                 <Settings className="h-5 w-5" />
-               </button>
-               <button className="rounded-2xl bg-white/5 p-3 lg:p-4 border border-white/10 hover:bg-white/10 transition-all text-zinc-400 hover:text-white">
-                 <Mail className="h-5 w-5" />
-               </button>
-             </div>
+            {isOwnProfile ? (
+              <>
+                 <Link to="/studio" className="flex items-center gap-3 rounded-2xl bg-neon-cyan px-6 lg:px-8 py-3 lg:py-4 text-[10px] font-black text-black transition-all hover:brightness-110 active:scale-95 uppercase tracking-widest shadow-[0_0_20px_rgba(0,243,255,0.3)]">
+                   <Plus className="h-4 w-4" />
+                   CREATOR STUDIO
+                 </Link>
+                 <button className="flex items-center gap-3 rounded-2xl bg-white/5 border border-white/10 px-5 lg:px-6 py-3 lg:py-4 text-[10px] font-black text-white hover:bg-white/10 active:scale-95 uppercase tracking-widest transition-all">
+                   <Edit2 className="h-4 w-4" />
+                   SYSTEM CONFIG
+                 </button>
+                 <div className="flex gap-3">
+                   <button className="rounded-2xl bg-white/5 p-3 lg:p-4 border border-white/10 hover:bg-white/10 transition-all text-zinc-400 hover:text-white">
+                     <Settings className="h-5 w-5" />
+                   </button>
+                 </div>
+              </>
+            ) : (
+              <button className="flex items-center gap-3 rounded-2xl bg-neon-cyan px-6 lg:px-8 py-3 lg:py-4 text-[10px] font-black text-black transition-all hover:brightness-110 active:scale-95 uppercase tracking-widest shadow-[0_0_20px_rgba(0,243,255,0.3)]">
+                SUBSCRIBE
+              </button>
+            )}
           </div>
         </div>
 
         {/* Dynamic Tabs */}
         <div className="profile-tabs sticky top-20 z-30 flex gap-10 border-b border-white/5 bg-void/80 backdrop-blur-xl mt-6 px-4 no-scrollbar overflow-x-auto">
            {[ 
-             { id: 'videos', label: 'Videos', icon: Grid },
-             { id: 'reels', label: 'Reels', icon: Play },
+             { id: 'videos', label: 'Videos', icon: Grid, count: userVideos.length },
+             { id: 'reels', label: 'Reels', icon: Play, count: userReels.length },
              { id: 'markets', label: 'Markets', icon: TrendingUp },
-             { id: 'shop', label: 'Store', icon: ShoppingBag }
+             { id: 'stores', label: 'Store', icon: ShoppingBag }
            ].map((tab) => {
              const isActive = activeTab === tab.id;
              return (
                <button 
                  key={tab.id}
-                 onClick={() => setActiveTab(tab.id as any)}
+                 onClick={() => {
+                   const basePath = id ? `/profile/user/${id}` : '/profile';
+                   navigate(`${basePath}/${tab.id}`);
+                 }}
                  className={`flex items-center gap-3 py-6 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${
                    isActive ? "text-neon-cyan" : "text-zinc-500 hover:text-white"
                  }`}
                >
                  <tab.icon className={cn("h-4 w-4", isActive && "text-neon-cyan")} />
                  {tab.label}
+                 {tab.count !== undefined && <span className="text-zinc-600 bg-white/5 px-2 py-0.5 rounded-full">{tab.count}</span>}
                  {isActive && (
                    <motion.div 
                      layoutId="profileTab" 
@@ -126,23 +365,116 @@ const Profile = () => {
         <div className="py-8">
            {activeTab === 'videos' && (
              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-               {userVideos.map(v => <VideoCard key={v.id} video={v} />)}
-               {userVideos.map(v => <VideoCard key={`dup-${v.id}`} video={v} />)}
+               {userVideos.length > 0 ? (
+                 userVideos.map(v => (
+                   <div key={v.id} className="relative">
+                     {isOwnProfile && (
+                       <div className="absolute top-2 right-2 z-20">
+                         <button
+                           onClick={() => setOpenVideoMenuId((prev) => (prev === v.id ? null : v.id))}
+                           className="rounded-lg bg-black/60 border border-white/20 p-1.5 text-white hover:bg-black/80 transition-all"
+                           aria-label="Video menu"
+                         >
+                           <MoreVertical className="h-4 w-4" />
+                         </button>
+                         {openVideoMenuId === v.id && (
+                           <div className="absolute right-0 mt-2 min-w-[160px] rounded-lg border border-white/10 bg-zinc-950/95 backdrop-blur-md p-1 shadow-2xl">
+                             <button
+                               onClick={() => {
+                                 setOpenVideoMenuId(null);
+                                 openVideoEditor(v);
+                               }}
+                               className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-bold text-zinc-200 hover:bg-white/10 transition-all"
+                             >
+                               <Edit2 className="h-3.5 w-3.5" />
+                               Edit video
+                             </button>
+                             <button
+                               onClick={() => {
+                                 setOpenVideoMenuId(null);
+                                 setVideoToDeleteId(v.id);
+                               }}
+                               className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-bold text-red-400 hover:bg-red-500/10 transition-all"
+                             >
+                               <Trash2 className="h-3.5 w-3.5" />
+                               Delete video
+                             </button>
+                           </div>
+                         )}
+                       </div>
+                     )}
+                     <VideoCard video={v} />
+                   </div>
+                 ))
+               ) : (
+                 <div className="col-span-full py-20 text-center text-zinc-500 font-bold uppercase tracking-widest text-xs">No videos uploaded yet.</div>
+               )}
              </div>
            )}
 
            {activeTab === 'reels' && (
              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                {userReels.map(v => (
-                  <div key={v.id} className="aspect-[2/3] bg-zinc-900 rounded-xl overflow-hidden border border-white/5 group relative cursor-pointer">
-                     <img src={v.thumbnail} alt="reel" className="h-full w-full object-cover transition-transform group-hover:scale-110" />
-                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-3">
-                        <div className="flex items-center gap-1 text-[10px] font-bold text-white">
-                           <Play className="h-3 w-3 fill-white" /> {v.views}
+                {userReels.length > 0 ? (
+                  userReels.map(v => (
+                    <div key={v.id} className="aspect-[2/3] bg-zinc-900 rounded-xl overflow-hidden border border-white/5 group relative">
+                      {isOwnProfile && (
+                        <div className="absolute top-2 right-2 z-20">
+                          <button
+                            onClick={() => setOpenReelMenuId((prev) => (prev === v.id ? null : v.id))}
+                            className="rounded-lg bg-black/60 border border-white/20 p-1.5 text-white hover:bg-black/80 transition-all"
+                            aria-label="Reel menu"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+                          {openReelMenuId === v.id && (
+                            <div className="absolute right-0 mt-2 min-w-[140px] rounded-lg border border-white/10 bg-zinc-950/95 backdrop-blur-md p-1 shadow-2xl">
+                              <button
+                                onClick={() => {
+                                  setOpenReelMenuId(null);
+                                  setReelToDeleteId(v.id);
+                                }}
+                                disabled={deletingReelId === v.id}
+                                className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-bold text-red-400 hover:bg-red-500/10 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                {deletingReelId === v.id ? 'Deleting...' : 'Delete reel'}
+                              </button>
+                            </div>
+                          )}
                         </div>
-                     </div>
-                  </div>
-                ))}
+                      )}
+                    <Link to={`/reel?v=${v.id}`} className="h-full w-full cursor-pointer block">
+                      {v.thumbnail_url || v.thumbnail ? (
+                        <img src={v.thumbnail_url || v.thumbnail} alt="reel" className="h-full w-full object-cover transition-transform group-hover:scale-110" />
+                      ) : v.video_file_url || v.video_url ? (
+                        <video
+                          src={v.video_file_url || v.video_url}
+                          className="h-full w-full object-cover transition-transform group-hover:scale-110"
+                          muted
+                          loop
+                          autoPlay
+                          playsInline
+                        />
+                      ) : (
+                        <div className="h-full w-full bg-zinc-900" />
+                      )}
+                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex flex-col justify-end p-3 pointer-events-none">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1 text-[10px] font-bold text-white">
+                               <Play className="h-3 w-3 fill-white" /> {v.views}
+                            </div>
+                            <div className="flex items-center gap-1 text-[10px] font-bold text-white">
+                               <Heart className="h-3 w-3 fill-white" /> {v.likes}
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-white mt-1 font-bold line-clamp-1 truncate">{v.title}</p>
+                       </div>
+                    </Link>
+                    </div>
+                  ))
+                ) : (
+                  <div className="col-span-full py-20 text-center text-zinc-500 font-bold uppercase tracking-widest text-xs">No reels uploaded yet.</div>
+                )}
              </div>
            )}
 
@@ -150,19 +482,170 @@ const Profile = () => {
              <div className="flex flex-col items-center justify-center py-20 text-center">
                 <TrendingUp className="h-16 w-16 text-zinc-800 mb-4" />
                 <h3 className="text-xl font-bold text-zinc-100">No active trades</h3>
-                <p className="text-sm text-zinc-500 max-w-xs mt-2">You haven't participated in any prediction markets yet. Start trading to earn Pulses.</p>
+                <p className="text-sm text-zinc-500 max-w-xs mt-2">No participation in prediction markets yet.</p>
              </div>
            )}
 
-           {activeTab === 'shop' && (
+           {activeTab === 'stores' && (
              <div className="flex flex-col items-center justify-center py-20 text-center">
                 <ShoppingBag className="h-16 w-16 text-zinc-800 mb-4" />
                 <h3 className="text-xl font-bold text-zinc-100">Store is empty</h3>
-                <p className="text-sm text-zinc-500 max-w-xs mt-2">List products in your store to start selling to your audience.</p>
+                <p className="text-sm text-zinc-500 max-w-xs mt-2">No products listed in store.</p>
              </div>
            )}
         </div>
       </div>
+
+      <AnimatePresence>
+        {reelToDeleteId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => !deletingReelId && setReelToDeleteId(null)}
+          >
+            <motion.div
+              initial={{ y: 12, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 12, opacity: 0 }}
+              className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-base font-black text-white uppercase tracking-wider">Delete Reel</h3>
+              <p className="mt-2 text-sm text-zinc-400">Delete this reel permanently?</p>
+              <div className="mt-6 flex items-center justify-end gap-3">
+                <button
+                  onClick={() => setReelToDeleteId(null)}
+                  disabled={!!deletingReelId}
+                  className="px-4 py-2 rounded-lg border border-white/10 text-zinc-300 text-xs font-bold uppercase tracking-wider hover:bg-white/5 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDeleteReel(reelToDeleteId)}
+                  disabled={!!deletingReelId}
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white text-xs font-bold uppercase tracking-wider hover:bg-red-500 disabled:opacity-60"
+                >
+                  {deletingReelId ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {editingVideo && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[125] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={closeVideoEditor}
+          >
+            <motion.div
+              initial={{ y: 12, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 12, opacity: 0 }}
+              className="w-full max-w-lg rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-base font-black text-white uppercase tracking-wider">Edit Video</h3>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Title</label>
+                <input
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-neon-cyan"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Description</label>
+                <textarea
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  rows={4}
+                  className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-neon-cyan resize-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Thumbnail</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleEditThumbnailChange}
+                  className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-xs text-zinc-300 outline-none"
+                />
+                {editThumbnailPreview && (
+                  <div className="rounded-lg overflow-hidden border border-white/10 max-w-xs">
+                    <img src={editThumbnailPreview} alt="Thumbnail preview" className="w-full h-28 object-cover" />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={closeVideoEditor}
+                  disabled={savingVideoEdit}
+                  className="px-4 py-2 rounded-lg border border-white/10 text-zinc-300 text-xs font-bold uppercase tracking-wider hover:bg-white/5 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveVideoEdit}
+                  disabled={savingVideoEdit}
+                  className="px-4 py-2 rounded-lg bg-neon-cyan text-black text-xs font-bold uppercase tracking-wider hover:brightness-110 disabled:opacity-60"
+                >
+                  {savingVideoEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {videoToDeleteId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[126] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => !deletingVideoId && setVideoToDeleteId(null)}
+          >
+            <motion.div
+              initial={{ y: 12, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 12, opacity: 0 }}
+              className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-base font-black text-white uppercase tracking-wider">Delete Video</h3>
+              <p className="mt-2 text-sm text-zinc-400">Delete this video permanently?</p>
+              <div className="mt-6 flex items-center justify-end gap-3">
+                <button
+                  onClick={() => setVideoToDeleteId(null)}
+                  disabled={!!deletingVideoId}
+                  className="px-4 py-2 rounded-lg border border-white/10 text-zinc-300 text-xs font-bold uppercase tracking-wider hover:bg-white/5 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDeleteVideo(videoToDeleteId)}
+                  disabled={!!deletingVideoId}
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white text-xs font-bold uppercase tracking-wider hover:bg-red-500 disabled:opacity-60"
+                >
+                  {deletingVideoId ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

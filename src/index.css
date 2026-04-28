@@ -11,7 +11,7 @@
   --color-zinc-800: #27272a;
   --color-zinc-900: #18181b;
   --color-zinc-950: #09090b;
-  
+
   --color-royal-indigo: #4f46e5;
   --color-rose-vpulse: #f43f5e;
   --color-emerald-vpulse: #10b981;
@@ -42,7 +42,9 @@
     --vp-accent: #ff00b7;
   }
 
-  html, body, #root {
+  html,
+  body,
+  #root {
     min-height: 100%;
     width: 100%;
     max-width: 100%;
@@ -59,7 +61,12 @@
     @apply font-sans antialiased overflow-x-hidden selection:bg-neon-cyan/30;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-display tracking-tight;
     color: var(--vp-fg);
   }
@@ -84,7 +91,10 @@
     border-radius: 10px;
   }
 
-  img, video, canvas, svg {
+  img,
+  video,
+  canvas,
+  svg {
     max-width: 100%;
   }
 
@@ -138,7 +148,6 @@
 
   [data-theme="light"] .video-card .text-white,
   [data-theme="light"] .reel-card .text-white,
-  [data-theme="light"] .market-card .text-white,
   [data-theme="light"] .live-video-card .text-white {
     color: #ffffff !important;
   }
@@ -181,8 +190,8 @@
     border-color: #ff00b7 !important;
   }
 
-  [data-theme="light"] .market-card > div > div > p,
-  [data-theme="light"] .market-card > div > div > h3 {
+  [data-theme="light"] .market-card>div>div>p,
+  [data-theme="light"] .market-card>div>div>h3 {
     color: #000000 !important;
   }
 
@@ -219,12 +228,14 @@
   [data-theme="light"] button[type],
   [data-theme="light"] a[role="button"] {
     background-color: #ffffff !important;
-    color: #ffffff !important;
+    color: #000000 !important;
   }
 
   [data-theme="light"] button svg,
-  [data-theme="light"] a[role="button"] svg {
-    color: #ffffff !important;
+  [data-theme="light"] a[role="button"] svg,
+  [data-theme="light"] .reel-card svg {
+    color: #000000 !important;
+    fill: transparent !important;
   }
 
   [data-theme="light"] .app-topbar .top-search-input {
@@ -260,7 +271,24 @@
   [data-theme="light"] button.bg-neon-purple,
   [data-theme="light"] .selected-accent {
     background-color: #ff00b7 !important;
+    color: #ffffff !important;
+    border-color: #ff00b7 !important;
+  }
+
+  [data-theme="light"] .action-pill-btn {
+    background-color: #f4f4f5 !important;
     color: #000000 !important;
+    border-color: #e4e4e7 !important;
+  }
+
+  [data-theme="light"] .action-pill-btn:hover {
+    background-color: #e4e4e7 !important;
+  }
+
+  [data-theme="light"] .bet-card-bg {
+    background-color: #ffffff !important;
+    border-color: #f4f4f5 !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
   }
 
   [data-theme="dark"] button,
@@ -280,7 +308,7 @@
   .glass-panel {
     @apply bg-zinc-900/50 backdrop-blur-md border border-zinc-800/50;
   }
-  
+
   .card-gradient {
     @apply bg-gradient-to-br from-zinc-900 via-zinc-950 to-black border border-zinc-800 shadow-2xl;
   }
@@ -308,6 +336,7 @@
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
@@ -328,8 +357,15 @@
 
 /* Animations */
 @keyframes pulse-neon {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+
+  50% {
+    opacity: 1;
+  }
 }
 
 .animate-pulse-neon {

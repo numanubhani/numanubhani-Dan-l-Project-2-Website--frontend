@@ -18,13 +18,14 @@ import { motion, AnimatePresence } from 'motion/react';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
+import LivePlayerChat from '../components/live/LivePlayerChat';
 
 function cn(...inputs: any[]) {
   return inputs.filter(Boolean).join(' ');
 }
 
 const Profile = () => {
-  const { id, section } = useParams();
+  const { id, section, username } = useParams();
   const navigate = useNavigate();
   const { user: currentUser, refreshProfile } = useAuth();
   
@@ -46,12 +47,31 @@ const Profile = () => {
   const [editThumbnailFile, setEditThumbnailFile] = useState<File | null>(null);
   const [editThumbnailPreview, setEditThumbnailPreview] = useState<string | null>(null);
   const [savingVideoEdit, setSavingVideoEdit] = useState(false);
+  const [liveStream, setLiveStream] = useState<any>(null);
+  const [liveLoading, setLiveLoading] = useState(false);
+  const [resolvedUserId, setResolvedUserId] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   // If no ID is provided, assume it's the current user's profile
-  const targetId = id || currentUser?.id;
+  const targetId = resolvedUserId || id || currentUser?.id;
   const isOwnProfile = currentUser && currentUser.id === targetId;
   const validSections = new Set(['videos', 'reels', 'markets', 'stores']);
+
+  useEffect(() => {
+    const resolveUsernameToId = async () => {
+      if (!username) {
+        setResolvedUserId(null);
+        return;
+      }
+      try {
+        const response = await api.get(`/profile/username/${username}/`);
+        setResolvedUserId(response.data.id);
+      } catch (error) {
+        setResolvedUserId(null);
+      }
+    };
+    resolveUsernameToId();
+  }, [username]);
 
   useEffect(() => {
     const normalizedSection = section?.toLowerCase();
@@ -63,9 +83,9 @@ const Profile = () => {
       setActiveTab(normalizedSection as 'videos' | 'reels' | 'markets' | 'stores');
       return;
     }
-    const basePath = id ? `/profile/user/${id}` : '/profile';
+    const basePath = username ? `/channel/${username}` : id ? `/profile/user/${id}` : '/profile';
     navigate(`${basePath}/videos`, { replace: true });
-  }, [section, id, navigate]);
+  }, [section, id, username, navigate]);
 
   useEffect(() => {
     const fetchProfileData = async () => {
@@ -98,6 +118,24 @@ const Profile = () => {
 
     fetchProfileData();
   }, [targetId, isOwnProfile]);
+
+  useEffect(() => {
+    const fetchChannelStream = async () => {
+      if (!profileData?.username) return;
+      try {
+        setLiveLoading(true);
+        const response = await api.get(`/channels/${profileData.username}/stream/`);
+        setLiveStream(response.data);
+      } catch (error) {
+        console.error('Failed to load live stream status', error);
+      } finally {
+        setLiveLoading(false);
+      }
+    };
+    fetchChannelStream();
+    const timer = setInterval(fetchChannelStream, 5000);
+    return () => clearInterval(timer);
+  }, [profileData?.username]);
 
   if (loading) {
      return <div className="min-h-screen bg-void flex items-center justify-center"><div className="h-8 w-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin" /></div>;
@@ -341,7 +379,7 @@ const Profile = () => {
                <button 
                  key={tab.id}
                  onClick={() => {
-                   const basePath = id ? `/profile/user/${id}` : '/profile';
+                  const basePath = username ? `/channel/${username}` : id ? `/profile/user/${id}` : '/profile';
                    navigate(`${basePath}/${tab.id}`);
                  }}
                  className={`flex items-center gap-3 py-6 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${
@@ -363,6 +401,21 @@ const Profile = () => {
         </div>
 
         <div className="py-8">
+          {!liveLoading && liveStream?.is_live && (
+            <div className="mb-8 space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="px-3 py-1 bg-red-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest">Live</span>
+                <h2 className="text-xl font-black uppercase tracking-tight text-white">{liveStream.title || `${profileData.username} is live`}</h2>
+              </div>
+              <LivePlayerChat
+                streamKey={liveStream.stream_key}
+                hlsUrl={liveStream.hls_url}
+                initialViewerCount={liveStream.viewer_count || 0}
+                onStreamEnded={() => setLiveStream((prev: any) => ({ ...prev, is_live: false }))}
+              />
+            </div>
+          )}
+
            {activeTab === 'videos' && (
              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                {userVideos.length > 0 ? (

@@ -1,16 +1,55 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { VideoCard, ReelCard } from '../components/common/VideoCard';
 import { MarketCard } from '../components/common/MarketCard';
 import { mockVideos, mockMarkets } from '../mockData';
 import { TrendingUp, ChevronRight, Play, Zap } from 'lucide-react';
 import { motion } from 'motion/react';
+import { Link } from 'react-router-dom';
+import { api } from '../services/api';
 
 const Home = () => {
   const shorts = mockVideos.filter(v => v.type === 'short');
   const longVideos = mockVideos.filter(v => v.type === 'long');
+  const [liveStreams, setLiveStreams] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadLiveStreams = async () => {
+      try {
+        const response = await api.get('/streams/live/');
+        setLiveStreams(response.data || []);
+      } catch (error) {
+        setLiveStreams([]);
+      }
+    };
+    loadLiveStreams();
+  }, []);
 
   return (
     <div className="space-y-12 py-6 px-4 lg:px-10 max-w-[1600px] mx-auto">
+      {liveStreams.length > 0 && (
+        <section className="space-y-5">
+          <div className="flex items-center justify-between border-b border-white/5 pb-4">
+            <h2 className="text-xl font-black tracking-tighter uppercase text-white italic flex items-center gap-3">
+              <Play className="h-5 w-5 text-neon-pink" />
+              LIVE NOW
+            </h2>
+            <Link to="/live" className="text-[10px] font-black text-neon-cyan uppercase tracking-widest">VIEW ALL</Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            {liveStreams.slice(0, 6).map((stream) => (
+              <Link key={stream.stream_key} to={`/channel/${stream.username}`} className="rounded-2xl border border-white/10 bg-white/5 p-4 hover:border-neon-cyan/40 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="px-2 py-1 rounded bg-red-600 text-white text-[9px] font-black uppercase tracking-widest">Live</span>
+                  <span className="text-[10px] text-zinc-400 font-black uppercase">{stream.viewer_count || 0} watching</span>
+                </div>
+                <p className="text-sm font-black uppercase text-white line-clamp-2">{stream.title}</p>
+                <p className="text-[10px] text-neon-cyan mt-2 font-black uppercase">@{stream.username}</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Featured Shorts Rail */}
       <section className="space-y-6">
         <div className="flex items-center justify-between border-b border-white/5 pb-4">

@@ -4,6 +4,7 @@ import { Bell, MessageSquare, Send, ThumbsUp, TrendingUp } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { toast } from 'sonner';
 import { api } from '../services/api';
+import { BetMarkerTimeline, maxAllowedTimeBeforeNextBet } from '../components/common/BetMarkerTimeline';
 
 const Watch = () => {
   const { id } = useParams();
@@ -18,12 +19,24 @@ const Watch = () => {
   const [placingBetKey, setPlacingBetKey] = useState<string | null>(null);
   const [activeTimelineMarkerId, setActiveTimelineMarkerId] = useState<string | null>(null);
   const [selectedOptionByMarker, setSelectedOptionByMarker] = useState<Record<string, string>>({});
-  const [triggeredMarkers, setTriggeredMarkers] = useState<Set<string>>(new Set());
+  const [markersWithBetPlaced, setMarkersWithBetPlaced] = useState<Set<string>>(new Set());
+  const placedRef = useRef<Set<string>>(new Set());
+  const [timelineNow, setTimelineNow] = useState(0);
+  const [mediaDuration, setMediaDuration] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
 
   const isLive = !!video?.is_live;
   const mediaUrl = video?.video_file_url || video?.video_url || '';
   const markers = Array.isArray(video?.bet_markers) ? video.bet_markers : [];
+  useEffect(() => {
+    placedRef.current = markersWithBetPlaced;
+  }, [markersWithBetPlaced]);
+
+  useEffect(() => {
+    setMediaDuration(0);
+    setTimelineNow(0);
+  }, [id]);
+
   const activeTimelineMarker = activeTimelineMarkerId
     ? markers.find((marker: any) => marker.id === activeTimelineMarkerId) || null
     : null;
@@ -118,6 +131,11 @@ const Watch = () => {
         amount,
       });
       toast.success('Bet placed successfully.');
+      setMarkersWithBetPlaced((prev) => {
+        const next = new Set(prev).add(markerId);
+        placedRef.current = next;
+        return next;
+      });
       return true;
     } catch (error: any) {
       console.error('Failed to place marker bet', error);
@@ -137,7 +155,7 @@ const Watch = () => {
     if (isLive || !videoRef.current || activeTimelineMarkerId) return;
     const currentTime = videoRef.current.currentTime;
     const nextMarker = markers.find((marker: any) => {
-      if (!marker?.id || triggeredMarkers.has(marker.id)) return false;
+      if (!marker?.id || markersWithBetPlaced.has(marker.id)) return false;
       const triggerAt = Math.max(0, Number(marker.timestamp || 0) - 1);
       return currentTime >= triggerAt;
     });
@@ -145,7 +163,14 @@ const Watch = () => {
     if (nextMarker) {
       videoRef.current.pause();
       setActiveTimelineMarkerId(nextMarker.id);
-      setTriggeredMarkers((prev) => new Set(prev).add(nextMarker.id));
+    }
+  };
+
+  const clampPlaybackToUnresolvedBets = () => {
+    if (isLive || !videoRef.current || markers.length === 0) return;
+    const maxT = maxAllowedTimeBeforeNextBet(markers, placedRef.current);
+    if (videoRef.current.currentTime > maxT) {
+      videoRef.current.currentTime = maxT;
     }
   };
 
@@ -182,7 +207,16 @@ const Watch = () => {
               controls={!isLive}
               autoPlay={isLive}
               playsInline
-              onTimeUpdate={handleVideoTimeUpdate}
+              onTimeUpdate={() => {
+                setTimelineNow(videoRef.current?.currentTime ?? 0);
+                handleVideoTimeUpdate();
+              }}
+              onLoadedMetadata={(e) => {
+                const d = e.currentTarget.duration;
+                if (Number.isFinite(d) && d > 0) setMediaDuration(d);
+              }}
+              onSeeking={clampPlaybackToUnresolvedBets}
+              onSeeked={clampPlaybackToUnresolvedBets}
               onPlay={() => {
                 if (activeTimelineMarkerId) {
                   videoRef.current?.pause();
@@ -191,6 +225,24 @@ const Watch = () => {
             />
           ) : (
             <div className="h-full w-full flex items-center justify-center text-zinc-500">No video source found.</div>
+          )}
+          {!isLive && mediaUrl && markers.length > 0 && (
+            <div className="absolute bottom-0 left-0 right-0 z-10 px-3 sm:px-4 pb-3 pt-8 bg-gradient-to-t from-black via-black/70 to-transparent pointer-events-none">
+              <div className="pointer-events-auto max-w-4xl mx-auto">
+                <BetMarkerTimeline
+                  duration={Math.max(
+                    mediaDuration,
+                    Number(video.duration_seconds || 0),
+                    Number(video.duration || 0)
+                  )}
+                  currentTime={timelineNow}
+                  markers={markers.map((m: any) => ({ id: String(m.id), timestamp: Number(m.timestamp) || 0 }))}
+                  activeMarkerId={activeTimelineMarkerId}
+                  completedMarkerIds={markersWithBetPlaced}
+                  label="Timeline · bets"
+                />
+              </div>
+            </div>
           )}
           {isLive && (
             <div className="absolute top-4 left-4 bg-neon-pink text-white text-[10px] tracking-widest font-bold px-3 py-1 rounded uppercase shadow-[0_0_15px_rgba(255,0,183,0.5)] animate-pulse">

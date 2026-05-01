@@ -16,8 +16,26 @@ export default defineConfig(({mode}) => {
       },
     },
     server: {
+      port: Number(env.VITE_DEV_PORT ?? 3000),
+      host: '0.0.0.0',
+      proxy: {
+        '/api': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+        '/o': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+        '/media': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+        '/ws': { target: 'ws://127.0.0.1:8001', ws: true },
+        '/hls': {
+          target: 'http://127.0.0.1:8888',
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/hls\/?/, '/') || '/',
+        },
+        '/whip': {
+          target: 'http://127.0.0.1:8889',
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/whip\/?/, '/') || '/',
+        },
+      },
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
+      // Do not modify: file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
     },
   };

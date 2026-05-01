@@ -1,14 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { api, oauthApi } from '../services/api';
+import { api } from '../services/api';
 import { User } from '../types';
 import { toast } from 'sonner';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (usernameOrEmail: string, password: string) => Promise<void>;
   logout: () => void;
-  register: (data: any) => Promise<void>;
+  register: (data: Record<string, string>) => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
 
@@ -18,24 +18,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // ─── Fetch the current user profile ─────────────────────────────────────────
   const fetchProfile = async () => {
     try {
       const response = await api.get('/profile/me/');
       const profile = response.data;
       setUser({
         ...profile,
-        avatar: profile.avatar || profile.avatar_url || '',
+        avatar: profile.avatar_url || profile.avatar || '',
       });
     } catch (error) {
       console.error('Failed to fetch profile', error);
       setUser(null);
+      localStorage.removeItem('auth_token');
     } finally {
       setLoading(false);
     }
   };
 
+  // On mount: restore session if token is stored
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
+    const token = localStorage.getItem('auth_token');
     if (token) {
       fetchProfile();
     } else {
@@ -43,49 +46,90 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  const login = async (username: string, password: string) => {
+  // ─── Login ───────────────────────────────────────────────────────────────────
+  const login = async (usernameOrEmail: string, password: string) => {
     try {
-      const params = new URLSearchParams();
-      params.append('grant_type', 'password');
-      params.append('username', username);
-      params.append('password', password);
-      params.append('client_id', 'vpulse_frontend_client');
-      // Secret is optional for public clients, but our app config might require it depending on setup.
-      // We set client_type = PUBLIC in the script, so we might not need the secret here.
-      // params.append('client_secret', 'vpulse_frontend_secret_key_123');
+      const response = await api.post(
+        '/auth/login/',
+        { username: usernameOrEmail, password },
+        { skipAuth: true } as any
+      );
 
-      const response = await oauthApi.post('/token/', params);
-      
-      if (response.data.access_token) {
-        localStorage.setItem('access_token', response.data.access_token);
-        localStorage.setItem('refresh_token', response.data.refresh_token);
-        await fetchProfile();
-        toast.success('Logged in successfully!');
-      }
+      const { token, user: userData } = response.data;
+      if (!token) throw new Error('No token returned from server.');
+
+      localStorage.setItem('auth_token', token);
+
+      setUser({
+        ...userData,
+        avatar: userData.avatar_url || userData.avatar || '',
+      });
+
+      toast.success('Logged in successfully!');
     } catch (error: any) {
       console.error('Login error', error.response?.data);
-      throw new Error(error.response?.data?.error_description || 'Login failed. Please check your credentials.');
+
+      // Build a friendly error message from DRF field / non-field errors
+      const data = error.response?.data;
+      if (data) {
+        if (typeof data === 'string') throw new Error(data);
+        // DRF serializer errors come under non_field_errors or field names
+        if (Array.isArray(data.non_field_errors) && data.non_field_errors.length > 0)
+          throw new Error(data.non_field_errors[0]);
+        if (typeof data.non_field_errors === 'string') throw new Error(data.non_field_errors);
+        if (data.detail) throw new Error(String(data.detail));
+        // Fall back: grab first field error
+        const firstKey = Object.keys(data)[0];
+        if (firstKey) {
+          const val = data[firstKey];
+          throw new Error(Array.isArray(val) ? val[0] : String(val));
+        }
+      }
+      throw new Error('Login failed. Please check your credentials.');
     }
   };
 
-  const register = async (data: any) => {
+  // ─── Register ────────────────────────────────────────────────────────────────
+  const register = async (data: Record<string, string>) => {
     try {
-      // Custom register endpoint expects json
-      await api.post('/auth/register/', data);
-      
-      // Auto-login after successful registration
+      // POST to /api/auth/register/ — no auth header needed
+      await api.post('/auth/register/', data, { skipAuth: true } as any);
+      // After registration, immediately log in to get a token
       await login(data.username, data.password);
-    } catch (error: any) {
-      console.error('Registration error', error.response?.data);
-      throw new Error(error.response?.data?.error || 'Registration failed. Please try again.');
+    } catch (error: unknown) {
+      const ax = error as { response?: { data?: unknown }; message?: string };
+
+      // Check for an Axios response error first (DRF 400 validation errors)
+      // AxiosError extends Error so we CANNOT use `instanceof Error` to distinguish
+      if (ax?.response?.data) {
+        const d = ax.response.data;
+        if (typeof d === 'object' && d !== null) {
+          const parts: string[] = [];
+          for (const [, val] of Object.entries(d as Record<string, unknown>)) {
+            if (Array.isArray(val)) parts.push((val as string[]).join(' '));
+            else if (typeof val === 'string') parts.push(val);
+          }
+          throw new Error(parts.join(' ') || 'Registration failed. Please try again.');
+        }
+        if (typeof d === 'string') throw new Error(d);
+      }
+
+      // Re-throw plain errors (e.g. thrown by login() with a clean message)
+      throw error;
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
+  // ─── Logout ──────────────────────────────────────────────────────────────────
+  const logout = async () => {
+    try {
+      await api.post('/auth/logout/');
+    } catch (_) {
+      // Ignore errors — we always clear locally
+    }
+    localStorage.removeItem('auth_token');
     setUser(null);
     toast.success('Logged out successfully!');
+    window.location.href = '/';
   };
 
   return (

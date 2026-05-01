@@ -1,9 +1,8 @@
 import axios from 'axios';
 
-// The backend is running on port 8000
-const BASE_URL = 'http://localhost:8000';
+const viteEnv = (import.meta as unknown as { env: { DEV: boolean; VITE_API_BASE_URL?: string } }).env;
+const BASE_URL = viteEnv.DEV ? '' : viteEnv.VITE_API_BASE_URL || 'http://localhost:8000';
 
-// API instance for general requests (prefixed with /api/)
 export const api = axios.create({
   baseURL: `${BASE_URL}/api`,
   headers: {
@@ -11,20 +10,20 @@ export const api = axios.create({
   },
 });
 
-// OAuth2 instance specifically for token requests (prefixed with /o/)
-export const oauthApi = axios.create({
-  baseURL: `${BASE_URL}/o`,
-  headers: {
-    'Content-Type': 'application/x-www-form-urlencoded',
-  },
-});
-
-// Add request interceptor to attach Bearer token to all api requests
+// Add request interceptor to attach DRF Token auth header
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('access_token');
+    const skipAuth = (config as { skipAuth?: boolean }).skipAuth === true;
+    const path = `${config.baseURL || ''}${config.url || ''}`.replace(/\/+/g, '/');
+    const isPublicAuth = /\/auth\/(register|login)\/?(\?|$)/.test(path);
+    if (skipAuth || isPublicAuth) {
+      delete (config.headers as Record<string, unknown>)['Authorization'];
+      return config;
+    }
+    const token = localStorage.getItem('auth_token');
     if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
+      // DRF TokenAuthentication expects "Token <key>" (not "Bearer")
+      config.headers['Authorization'] = `Token ${token}`;
     }
     return config;
   },
@@ -33,49 +32,17 @@ api.interceptors.request.use(
   }
 );
 
-// Add response interceptor to handle 401 Unauthorized (Token Expiration)
-// In a full production app, this is where you'd use the refresh_token
-// to silently fetch a new access_token and retry the request.
+// Handle 401 — clear token and redirect to login
 api.interceptors.response.use(
   (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-    
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      const refreshToken = localStorage.getItem('refresh_token');
-      
-      if (refreshToken) {
-        try {
-          const params = new URLSearchParams();
-          params.append('grant_type', 'refresh_token');
-          params.append('refresh_token', refreshToken);
-          params.append('client_id', 'vpulse_frontend_client');
-          
-          const response = await oauthApi.post('/token/', params);
-          
-          if (response.data.access_token) {
-            localStorage.setItem('access_token', response.data.access_token);
-            localStorage.setItem('refresh_token', response.data.refresh_token);
-            
-            // Retry the original request with new token
-            originalRequest.headers['Authorization'] = `Bearer ${response.data.access_token}`;
-            return api(originalRequest);
-          }
-        } catch (refreshError) {
-          // Refresh failed, logout user
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          window.location.href = '/login';
-        }
-      } else {
-        // No refresh token, logout user
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
+  (error) => {
+    if (error.response?.status === 401) {
+      const hasToken = !!localStorage.getItem('auth_token');
+      if (hasToken) {
+        localStorage.removeItem('auth_token');
         window.location.href = '/login';
       }
     }
-    
     return Promise.reject(error);
   }
 );

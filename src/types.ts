@@ -3,14 +3,25 @@ export type VideoType = 'short' | 'long' | 'live';
 export interface User {
   id: string;
   username: string;
-  avatar: string;
-  avatar_url?: string;
-  isVerified: boolean;
-  isLive?: boolean;
-  followers: number;
-  following: number;
-  bio?: string;
+  email: string;
+  name: string;
+  avatar: string;        // mapped from avatar_url by AuthContext
+  avatar_url?: string;   // raw field from backend
+  role: 'VIEWER' | 'CREATOR' | 'ADMIN';
   balance: number;
+  bio?: string;
+  location?: string;
+  website?: string;
+  date_joined?: string;
+  date_of_birth?: string;
+  // computed fields from UserProfileSerializer
+  followers_count?: number;
+  following_count?: number;
+  videos_count?: number;
+  is_following?: boolean;
+  // kept for UI compatibility
+  isVerified?: boolean;
+  isLive?: boolean;
 }
 
 export interface Video {

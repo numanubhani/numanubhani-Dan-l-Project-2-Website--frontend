@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Upload, 
@@ -18,12 +18,16 @@ import {
   DollarSign,
   ShieldCheck
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { api } from '../services/api';
+import { BetMarkerTimeline } from '../components/common/BetMarkerTimeline';
+import { useAuth } from '../contexts/AuthContext';
+import LivePlayerChat from '../components/live/LivePlayerChat';
 
 const Studio = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [contentType, setContentType] = useState<'long' | 'short'>('long');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -34,15 +38,77 @@ const Studio = () => {
   const [videoDurationSeconds, setVideoDurationSeconds] = useState<number | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [streamInfo, setStreamInfo] = useState<any>(null);
+  const [streamTitle, setStreamTitle] = useState('');
+  const [savingStreamTitle, setSavingStreamTitle] = useState(false);
   
   // Timed Bet States
   const [betTriggers, setBetTriggers] = useState<{ id: string; timestamp: number; question: string; options: string[] }[]>([]);
   const [editingBet, setEditingBet] = useState<{ timestamp: number; question: string; options: string[] } | null>(null);
   const [previewingBet, setPreviewingBet] = useState<{ id: string; timestamp: number; question: string; options: string[] } | null>(null);
+  const [previewCurrentTime, setPreviewCurrentTime] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const streamTitleDirtyRef = useRef(false);
+  const prevLiveRef = useRef<boolean | undefined>(undefined);
 
   const wordCount = description.trim().split(/\s+/).filter(w => w.length > 0).length;
   const maxWords = contentType === 'long' ? 200 : 20;
+
+  const refreshLiveSnapshot = React.useCallback(async () => {
+    try {
+      const response = await api.get('/streams/my-key/');
+      const data = response.data;
+      setStreamInfo(data);
+      if (!streamTitleDirtyRef.current) {
+        setStreamTitle(data.title || '');
+      }
+      const prev = prevLiveRef.current;
+      const nowLive = !!data.is_live;
+      if (prev === false && nowLive) {
+        toast.success("You're live", { description: 'Encoder connected. Preview below — viewers see this on your channel.' });
+      }
+      prevLiveRef.current = nowLive;
+    } catch {
+      console.error('Failed to refresh stream status');
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshLiveSnapshot();
+  }, [refreshLiveSnapshot]);
+
+  useEffect(() => {
+    const id = window.setInterval(refreshLiveSnapshot, 2800);
+    return () => clearInterval(id);
+  }, [refreshLiveSnapshot]);
+
+  const saveLiveTitle = async () => {
+    if (!streamTitle.trim()) {
+      toast.error('Title is required.');
+      return;
+    }
+    try {
+      setSavingStreamTitle(true);
+      await api.post('/streams/update-title/', { title: streamTitle.trim() });
+      toast.success('Live stream title updated.');
+      streamTitleDirtyRef.current = false;
+      await refreshLiveSnapshot();
+    } catch (error) {
+      console.error('Failed to update stream title', error);
+      toast.error('Failed to update stream title.');
+    } finally {
+      setSavingStreamTitle(false);
+    }
+  };
+
+  const copyToClipboard = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied.`);
+    } catch (error) {
+      toast.error(`Failed to copy ${label}.`);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -100,6 +166,7 @@ const Studio = () => {
 
     setFile(selectedFile);
     setPreviewUrl(URL.createObjectURL(selectedFile));
+    setPreviewCurrentTime(0);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -223,6 +290,84 @@ const Studio = () => {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
         {/* Left Column: Form */}
         <div className="xl:col-span-2 space-y-8">
+          <div className="studio-creator-form-card p-8 rounded-[3rem] bg-white border-2 border-neon-cyan space-y-6 relative overflow-hidden">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="space-y-1">
+                <h2 className="text-2xl font-black text-zinc-900 uppercase tracking-tight">Go Live Setup</h2>
+                <p className="text-[9px] text-zinc-600 font-black uppercase tracking-widest max-w-xl">
+                  Go live either directly from this app (camera/screen share) or from external encoder. Once MediaMTX receives stream, your channel turns live automatically.
+                </p>
+              </div>
+              {streamInfo && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {streamInfo.is_live ? (
+                    <span className="rounded-lg bg-red-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white animate-pulse">Live</span>
+                  ) : (
+                    <span className="rounded-lg bg-zinc-200 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-zinc-600">Waiting for encoder</span>
+                  )}
+                  {user?.username && (
+                    <Link to={`/channel/${user.username}`} className="text-[10px] font-black uppercase tracking-widest text-neon-purple hover:underline">
+                      Open channel
+                    </Link>
+                  )}
+                </div>
+              )}
+            </div>
+            {streamInfo && (
+              <>
+                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-5 py-4 space-y-2">
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Steps</p>
+                  <ol className="list-decimal pl-5 space-y-1.5 text-[11px] font-bold text-zinc-700">
+                    <li>Save your <strong className="uppercase">live title</strong> (what viewers see).</li>
+                    <li>Click <strong className="uppercase">Start In-App Live</strong> for camera/screen broadcast, or use the ingest details below with any encoder.</li>
+                    <li>When publishing starts, this page detects it and loads preview + chat.</li>
+                  </ol>
+                  <Link to="/go-live" className="inline-flex mt-2 rounded-xl bg-neon-cyan px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black">
+                    Start In-App Live
+                  </Link>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl bg-zinc-100 border border-zinc-200">
+                    <p className="text-[8px] font-black text-zinc-500 uppercase tracking-widest mb-2">Encoder Server URL (RTMP)</p>
+                    <p className="text-xs font-mono text-zinc-900 break-all">{streamInfo.ingest_url}</p>
+                    <button type="button" onClick={() => copyToClipboard(streamInfo.ingest_url, 'RTMP URL')} className="mt-2 text-[10px] font-black uppercase text-neon-purple">Copy</button>
+                  </div>
+                  <div className="p-4 rounded-xl bg-zinc-100 border border-zinc-200">
+                    <p className="text-[8px] font-black text-zinc-500 uppercase tracking-widest mb-2">Encoder Stream key</p>
+                    <p className="text-xs font-mono text-zinc-900 break-all">{streamInfo.stream_key}</p>
+                    <button type="button" onClick={() => copyToClipboard(streamInfo.stream_key, 'stream key')} className="mt-2 text-[10px] font-black uppercase text-neon-purple">Copy</button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[8px] font-black text-zinc-600 uppercase tracking-widest px-1">Live Title</label>
+                  <div className="flex gap-2">
+                    <input value={streamTitle} onFocus={() => { streamTitleDirtyRef.current = true; }} onChange={(e) => { streamTitleDirtyRef.current = true; setStreamTitle(e.target.value); }} className="flex-1 bg-white border border-neon-cyan/30 rounded-xl p-3 text-xs font-black text-zinc-900 uppercase" />
+                    <button type="button" onClick={saveLiveTitle} disabled={savingStreamTitle} className="px-4 rounded-xl bg-neon-cyan text-black text-[10px] font-black uppercase tracking-widest">
+                      {savingStreamTitle ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-x-6 gap-y-1 text-[8px] text-zinc-500 uppercase tracking-wider">
+                    {user?.username && (
+                      <span>
+                        Channel ·{' '}
+                        <Link to={`/channel/${user.username}`} className="text-neon-purple font-black">
+                          @{user.username}
+                        </Link>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {streamInfo.is_live && streamInfo.stream_key && streamInfo.hls_url && (
+                  <div className="space-y-2 pt-2 border-t border-zinc-200">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Broadcast preview ({streamInfo.viewer_count ?? 0} watching)</p>
+                    <LivePlayerChat streamKey={streamInfo.stream_key} hlsUrl={streamInfo.hls_url} initialViewerCount={streamInfo.viewer_count ?? 0} />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
            <div className="studio-creator-form-card p-8 rounded-[3rem] bg-white border-2 border-neon-pink space-y-8 relative overflow-hidden group">
               <div className="space-y-6">
                  <div className="space-y-2">
@@ -275,7 +420,9 @@ const Studio = () => {
                 <div className="flex items-center justify-between">
                    <div className="space-y-1">
                       <h3 className="text-xl font-black text-zinc-900 italic uppercase tracking-tighter">Market Timeline</h3>
-                      <p className="text-[8px] text-zinc-600 font-black uppercase tracking-widest">Pin market triggers to specific timestamps</p>
+                      <p className="text-[8px] text-zinc-600 font-black uppercase tracking-widest">
+                        Pin bets on the scrubber for long uploads and reels. Use play controls to seek, then DRIP TRIGGER.
+                      </p>
                    </div>
                    <button 
                      onClick={addBetTrigger}
@@ -409,7 +556,8 @@ const Studio = () => {
                     ref={videoRef}
                     src={previewUrl} 
                     className="w-full h-full object-cover opacity-80"
-                    controls={contentType === 'long' && !previewingBet}
+                    controls={!previewingBet}
+                    onTimeUpdate={() => setPreviewCurrentTime(videoRef.current?.currentTime ?? 0)}
                   />
                   <div className="absolute top-6 left-6 flex gap-2">
                      <div className={cn(
@@ -419,6 +567,24 @@ const Studio = () => {
                         {contentType === 'long' ? 'Transmission' : 'Velocity'}
                      </div>
                   </div>
+
+                  {previewUrl && videoDurationSeconds != null && videoDurationSeconds > 0 && (
+                    <div className="absolute inset-x-0 bottom-0 z-[15] px-4 pb-3 pt-10 bg-gradient-to-t from-black/80 to-transparent pointer-events-auto">
+                      <BetMarkerTimeline
+                        duration={videoDurationSeconds}
+                        currentTime={previewCurrentTime}
+                        markers={betTriggers.map((b) => ({ id: b.id, timestamp: b.timestamp }))}
+                        activeMarkerId={previewingBet?.id ?? null}
+                        label={contentType === 'short' ? 'Reels timeline · bet markers' : 'Play timeline · bet markers'}
+                        interactive
+                        onSeek={(sec) => {
+                          if (!videoRef.current || previewingBet) return;
+                          videoRef.current.currentTime = Math.min(sec, videoRef.current.duration || sec);
+                          setPreviewCurrentTime(videoRef.current.currentTime);
+                        }}
+                      />
+                    </div>
+                  )}
 
                   <AnimatePresence>
                     {previewingBet && (

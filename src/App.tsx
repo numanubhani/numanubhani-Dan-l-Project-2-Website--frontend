@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import { AuthProvider } from './contexts/AuthContext';
 import { Layout } from './components/layout/RootLayout';
 import Home from './pages/Home';
@@ -11,7 +12,9 @@ import Explore from './pages/Explore';
 import PredictionMarket from './pages/PredictionMarket';
 import Shop from './pages/Shop';
 import Login from './pages/Login';
+import Signup from './pages/Signup';
 import Studio from './pages/Studio';
+import GoLive from './pages/GoLive';
 
 // Placeholder smaller routes
 import { TrendingUp, Radio, Users } from 'lucide-react';
@@ -113,9 +116,19 @@ function cn(...inputs: any[]) {
 export default function App() {
   return (
     <AuthProvider>
+      {/* Sonner toast container — must be here so toasts render app-wide */}
+      <Toaster
+        position="top-right"
+        richColors
+        closeButton
+        duration={5000}
+        toastOptions={{ style: { fontFamily: 'inherit' } }}
+      />
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/register" element={<Signup />} />
           
           <Route path="/" element={<Layout><Home /></Layout>} />
           <Route path="/home" element={<Layout><Home /></Layout>} />
@@ -132,7 +145,10 @@ export default function App() {
           <Route path="/profile/:section" element={<Layout><Profile /></Layout>} />
           <Route path="/profile/user/:id" element={<Layout><Profile /></Layout>} />
           <Route path="/profile/user/:id/:section" element={<Layout><Profile /></Layout>} />
+          <Route path="/channel/:username" element={<Layout><Profile /></Layout>} />
+          <Route path="/channel/:username/:section" element={<Layout><Profile /></Layout>} />
           <Route path="/studio" element={<Layout><Studio /></Layout>} />
+          <Route path="/go-live" element={<Layout><GoLive /></Layout>} />
           <Route path="/watch/:id" element={<Layout><Watch /></Layout>} />
           
           <Route path="/reel" element={<VerticalFeed />} />

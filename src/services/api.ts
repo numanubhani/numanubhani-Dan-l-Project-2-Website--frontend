@@ -1,7 +1,25 @@
 import axios from 'axios';
 
-const viteEnv = (import.meta as unknown as { env: { DEV: boolean; VITE_API_BASE_URL?: string } }).env;
-const BASE_URL = viteEnv.DEV ? '' : viteEnv.VITE_API_BASE_URL || 'http://localhost:8000';
+const LOCAL_BACKEND = 'http://localhost:8000';
+const DEPLOYED_BACKEND = 'https://muhammadnumansubhan1.pythonanywhere.com';
+
+// In DEV, we use the Vite proxy (empty string). In PROD, we use the deployed URL.
+const BASE_URL = import.meta.env.DEV ? '' : DEPLOYED_BACKEND;
+
+/**
+ * Utility to fix absolute URLs returned by the backend that might 
+ * incorrectly point to localhost:8000 in production.
+ */
+export const fixUrl = (url: string | null | undefined): string => {
+  if (!url) return '';
+  if (url.startsWith('blob:')) return url;
+  if (import.meta.env.DEV) return url;
+  // Replace localhost:8000 with the actual deployed domain if found
+  if (url.includes('localhost:8000') || url.includes('127.0.0.1:8000')) {
+    return url.replace(/^http:\/\/(localhost|127\.0\.0\.1):8000/, DEPLOYED_BACKEND);
+  }
+  return url;
+};
 
 export const api = axios.create({
   baseURL: `${BASE_URL}/api`,

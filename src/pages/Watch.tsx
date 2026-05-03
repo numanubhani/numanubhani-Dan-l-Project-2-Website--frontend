@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Bell, MessageSquare, Send, ThumbsUp, TrendingUp } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { toast } from 'sonner';
-import { api } from '../services/api';
+import { api, fixUrl } from '../services/api';
 import { BetMarkerTimeline, maxAllowedTimeBeforeNextBet } from '../components/common/BetMarkerTimeline';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -35,7 +35,7 @@ const Watch = () => {
   const subscribedToCreator = Boolean(video?.is_following_creator);
   const isOwnVideo =
     !!(currentUser && creatorId && String(currentUser.id) === String(creatorId));
-  const mediaUrl = video?.video_file_url || video?.video_url || '';
+  const mediaUrl = fixUrl(video?.video_file_url || video?.video_url || '');
   const markers = Array.isArray(video?.bet_markers) ? video.bet_markers : [];
   const autoplayFromNotification =
     searchParams.get('autoplay') === '1' || searchParams.get('autoplay') === 'true';
@@ -349,7 +349,7 @@ const Watch = () => {
                 className={`shrink-0 h-10 w-10 sm:h-12 sm:w-12 rounded-full overflow-hidden bg-zinc-900 ${!creatorId ? 'pointer-events-none opacity-70' : ''}`}
               >
                 {video.creator_avatar ? (
-                  <img src={video.creator_avatar} alt={video.creator_name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                  <img src={fixUrl(video.creator_avatar)} alt={video.creator_name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                 ) : (
                   <div className="h-full w-full bg-gradient-to-br from-neon-purple to-neon-pink" />
                 )}
@@ -422,7 +422,7 @@ const Watch = () => {
           <div className="space-y-4">
             {comments.map((item) => (
               <div key={item.id} className="flex gap-3">
-                <img src={item.user_avatar} alt={item.user_username} className="w-9 h-9 rounded-full object-cover" />
+                <img src={fixUrl(item.user_avatar)} alt={item.user_username} className="w-9 h-9 rounded-full object-cover" />
                 <div>
                   <div className="text-sm font-bold text-white">@{item.user_username}</div>
                   <div className="text-sm text-zinc-300">{item.text}</div>

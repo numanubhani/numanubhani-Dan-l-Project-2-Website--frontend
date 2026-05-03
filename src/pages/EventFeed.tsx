@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Heart, MessageCircle, Share2, Bookmark, Bell, Plus, Home, Compass, Wallet, User, X, ChevronDown } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { eventApi } from '../services/api';
+import { eventApi, fixUrl } from '../services/api';
 import type { FeedEvent, ChallengeEvent, PredictionFeedItem } from '../types';
 
 const MOCK_FEED: FeedEvent[] = [
@@ -169,7 +169,7 @@ export default function EventFeed() {
           const nPct = d.no_pct ?? 50;
           const pool = d.pool_amount ?? d.volume ?? 0;
           const creatorName = isChallenge ? d.creator_name : 'VPulse Markets';
-          const creatorAvatar = isChallenge ? d.creator_avatar : 'https://i.pravatar.cc/150?img=5';
+          const creatorAvatar = fixUrl(isChallenge ? d.creator_avatar : 'https://i.pravatar.cc/150?img=5');
           const creatorUser = isChallenge ? d.creator_username : 'vpulse';
           const bg = GRADIENTS[idx % GRADIENTS.length];
           const id = d.id;
@@ -181,7 +181,7 @@ export default function EventFeed() {
               {/* BG */}
               <div className="absolute inset-0" style={{ background: bg }}>
                 {d.image && (
-                  <img src={d.image} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-overlay" />
+                  <img src={fixUrl(d.image)} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-overlay" />
                 )}
                 {/* animated orbs */}
                 <div className="absolute top-1/4 left-1/4 w-64 h-64 rounded-full blur-[80px] animate-pulse" style={{ background: isChallenge ? 'rgba(37,99,235,0.3)' : 'rgba(234,88,12,0.3)' }} />

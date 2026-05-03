@@ -16,7 +16,7 @@ import {
 import { VideoCard } from '../components/common/VideoCard';
 import { MarketCard } from '../components/common/MarketCard';
 import { motion, AnimatePresence } from 'motion/react';
-import { api } from '../services/api';
+import { api, fixUrl } from '../services/api';
 import { fetchMarkets, voteMarket } from '../services/predictionMarkets';
 import type { Market } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -395,7 +395,7 @@ const Profile = () => {
                 onChange={handleAvatarChange}
               />
               <div className="h-32 w-32 lg:h-48 lg:w-48 overflow-hidden rounded-[2.5rem] border-4 border-void shadow-[0_0_30px_rgba(0,0,0,0.5)] bg-zinc-900 ring-1 ring-white/10 group-hover:border-neon-cyan transition-all duration-500">
-                <img src={profileData.avatar_url || `https://ui-avatars.com/api/?name=${profileData.username}&background=random`} alt="Avatar" className="h-full w-full object-cover transition-transform group-hover:scale-110 opacity-80 group-hover:opacity-100" referrerPolicy="no-referrer" />
+                <img src={fixUrl(profileData.avatar_url || `https://ui-avatars.com/api/?name=${profileData.username}&background=random`)} alt="Avatar" className="h-full w-full object-cover transition-transform group-hover:scale-110 opacity-80 group-hover:opacity-100" referrerPolicy="no-referrer" />
               </div>
               {isOwnProfile && (
                 <button
@@ -595,10 +595,10 @@ const Profile = () => {
                       )}
                     <Link to={`/reel?v=${v.id}`} className="h-full w-full cursor-pointer block">
                       {v.thumbnail_url || v.thumbnail ? (
-                        <img src={v.thumbnail_url || v.thumbnail} alt="reel" className="h-full w-full object-cover transition-transform group-hover:scale-110" />
+                        <img src={fixUrl(v.thumbnail_url || v.thumbnail)} alt="reel" className="h-full w-full object-cover transition-transform group-hover:scale-110" />
                       ) : v.video_file_url || v.video_url ? (
                         <video
-                          src={v.video_file_url || v.video_url}
+                          src={fixUrl(v.video_file_url || v.video_url)}
                           className="h-full w-full object-cover transition-transform group-hover:scale-110"
                           muted
                           loop
@@ -754,7 +754,7 @@ const Profile = () => {
                 />
                 {editThumbnailPreview && (
                   <div className="rounded-lg overflow-hidden border border-white/10 max-w-xs">
-                    <img src={editThumbnailPreview} alt="Thumbnail preview" className="w-full h-28 object-cover" />
+                    <img src={fixUrl(editThumbnailPreview)} alt="Thumbnail preview" className="w-full h-28 object-cover" />
                   </div>
                 )}
               </div>

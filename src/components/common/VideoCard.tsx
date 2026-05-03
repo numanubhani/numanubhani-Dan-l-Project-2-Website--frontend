@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { MoreVertical } from 'lucide-react';
 import { Video } from '../../types';
+import { fixUrl } from '../../services/api';
 
 /** e.g. 1:24:15 or 15:02 */
 function formatDurationSeconds(totalSeconds: number): string {
@@ -71,15 +72,17 @@ export const VideoCard: React.FC<VideoCardProps> = ({
     (video as any)?.creator_name?.trim() ||
     (video as any)?.creator?.name?.trim() ||
     creatorUsername;
-  const creatorAvatar =
+  const creatorAvatar = fixUrl(
     (video as any)?.creator_avatar ||
     (video as any)?.creator?.avatar ||
     (video as any)?.creator?.avatar_url ||
-    '';
-  const thumbnailSrc = (video as any)?.thumbnail_url || (video as any)?.thumbnail || '';
+    ''
+  );
+  const thumbnailSrc = fixUrl((video as any)?.thumbnail_url || (video as any)?.thumbnail || '');
   const apiDuration = Number((video as any)?.duration || (video as any)?.duration_seconds || 0);
-  const videoSource =
-    (video as any)?.video_file_url || (video as any)?.videoUrl || (video as any)?.video_url || '';
+  const videoSource = fixUrl(
+    (video as any)?.video_file_url || (video as any)?.videoUrl || (video as any)?.video_url || ''
+  );
   const [resolvedDuration, setResolvedDuration] = React.useState<number>(apiDuration);
 
   const createdIso =
@@ -212,12 +215,14 @@ export const ReelCard: React.FC<{ video: Video }> = ({ video }) => {
     (video as any)?.creator_username ||
     (video as any)?.creator_name ||
     'creator';
-  const creatorAvatar =
-    (video as any)?.creator?.avatar || (video as any)?.creator_avatar || '';
-  const thumbnailSrc = (video as any)?.thumbnail_url || (video as any)?.thumbnail || '';
+  const creatorAvatar = fixUrl(
+    (video as any)?.creator?.avatar || (video as any)?.creator_avatar || ''
+  );
+  const thumbnailSrc = fixUrl((video as any)?.thumbnail_url || (video as any)?.thumbnail || '');
   const apiDuration = Number((video as any)?.duration || (video as any)?.duration_seconds || 0);
-  const videoSource =
-    (video as any)?.video_file_url || (video as any)?.videoUrl || (video as any)?.video_url || '';
+  const videoSource = fixUrl(
+    (video as any)?.video_file_url || (video as any)?.videoUrl || (video as any)?.video_url || ''
+  );
   const [resolvedDuration, setResolvedDuration] = React.useState<number>(apiDuration);
 
   React.useEffect(() => {

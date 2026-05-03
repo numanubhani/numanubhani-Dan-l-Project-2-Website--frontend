@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { api } from '../services/api';
+import { api, fixUrl } from '../services/api';
 import { User } from '../types';
 import { toast } from 'sonner';
 
@@ -25,7 +25,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const profile = response.data;
       setUser({
         ...profile,
-        avatar: profile.avatar_url || profile.avatar || '',
+        avatar: fixUrl(profile.avatar_url || profile.avatar || ''),
       });
     } catch (error) {
       console.error('Failed to fetch profile', error);
@@ -62,7 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setUser({
         ...userData,
-        avatar: userData.avatar_url || userData.avatar || '',
+        avatar: fixUrl(userData.avatar_url || userData.avatar || ''),
       });
 
       toast.success('Logged in successfully!');

@@ -38,7 +38,6 @@ export const Sidebar = ({
   const navItems = [
     { label: 'Home', icon: Home, path: '/' },
     { label: 'Explore', icon: Compass, path: '/explore' },
-    { label: 'Events', icon: Flame, path: '/events' },
     { label: 'Following', icon: Users, path: '/following' },
     { label: 'Live', icon: Radio, path: '/live' },
     { label: 'Shop', icon: ShoppingBag, path: '/shop' },

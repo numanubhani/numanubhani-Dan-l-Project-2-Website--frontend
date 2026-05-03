@@ -647,7 +647,7 @@ const Studio = () => {
                 </AnimatePresence>
               </>
             ) : (
-              <div className="flex flex-col items-center px-8 py-12 text-center">
+              <label className="flex flex-col items-center px-8 py-12 text-center cursor-pointer group">
                 <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-zinc-50 transition-transform group-hover:scale-110">
                   <Upload className="h-10 w-10 text-zinc-400" />
                 </div>
@@ -655,11 +655,11 @@ const Studio = () => {
                 <p className="mx-auto mt-2 max-w-xs text-sm text-zinc-500">
                   Your videos stay private until you publish. MP4, WEBM, MOV — long videos up to 60 minutes.
                 </p>
-                <label className="mt-8 cursor-pointer rounded-full bg-zinc-900 px-8 py-3 text-sm font-bold tracking-wide text-white transition-colors hover:bg-zinc-800">
+                <div className="mt-8 rounded-full bg-zinc-900 px-8 py-3 text-sm font-bold tracking-wide text-white transition-colors group-hover:bg-zinc-800">
                   Select files
-                  <input type="file" accept="video/*" className="hidden" onChange={handleFileChange} />
-                </label>
-              </div>
+                </div>
+                <input type="file" accept="video/*" className="hidden" onChange={handleFileChange} />
+              </label>
             )}
           </div>
 

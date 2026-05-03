@@ -1,22 +1,21 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Upload, 
-  X, 
-  Video, 
-  Layers, 
-  Zap, 
-  Clock, 
-  Plus, 
-  Trash2, 
-  Save,
+import {
+  Upload,
+  X,
+  Clock,
+  Plus,
+  Trash2,
   CheckCircle2,
   TrendingUp,
-  ChevronRight,
-  ShieldAlert,
   Eye,
   DollarSign,
-  ShieldCheck
+  Info,
+  ImagePlus,
+  FileVideo,
+  MessageCircle,
+  ChevronDown,
+  Radio,
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -24,11 +23,23 @@ import { api } from '../services/api';
 import { BetMarkerTimeline } from '../components/common/BetMarkerTimeline';
 import { useAuth } from '../contexts/AuthContext';
 import LivePlayerChat from '../components/live/LivePlayerChat';
+import { cn } from '@/lib/utils';
+
+const CATEGORY_PRESETS = [
+  'Education',
+  'Entertainment',
+  'Technology',
+  'Vlog',
+  'Gaming',
+  'Music',
+  'Sports',
+  'News',
+] as const;
 
 const Studio = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [contentType, setContentType] = useState<'long' | 'short'>('long');
+  const [studioTab, setStudioTab] = useState<'long' | 'short' | 'live'>('long');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -51,8 +62,15 @@ const Studio = () => {
   const streamTitleDirtyRef = useRef(false);
   const prevLiveRef = useRef<boolean | undefined>(undefined);
 
+  const [category, setCategory] = useState('Education');
+  const [visibility, setVisibility] = useState('public');
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+  const [commentsEnabled, setCommentsEnabled] = useState(true);
+  const [commentsSectionOpen, setCommentsSectionOpen] = useState(true);
+
   const wordCount = description.trim().split(/\s+/).filter(w => w.length > 0).length;
-  const maxWords = contentType === 'long' ? 200 : 20;
+  const maxWords = studioTab === 'long' ? 200 : studioTab === 'short' ? 20 : 200;
 
   const refreshLiveSnapshot = React.useCallback(async () => {
     try {
@@ -207,12 +225,53 @@ const Studio = () => {
     if (previewingBet?.id === id) setPreviewingBet(null);
   };
 
+  const saveDraft = () => {
+    try {
+      localStorage.setItem(
+        'vpulse-studio-draft',
+        JSON.stringify({
+          title,
+          description,
+          studioTab,
+          category,
+          visibility,
+          tags,
+          savedAt: Date.now(),
+        }),
+      );
+      toast.success('Draft saved', { description: 'Stored on this device.' });
+    } catch {
+      toast.error('Could not save draft.');
+    }
+  };
+
+  const addTag = () => {
+    const t = tagInput.trim().replace(/^#/, '');
+    if (!t || tags.includes(t)) return;
+    if (tags.length >= 12) {
+      toast.message('Maximum 12 tags.');
+      return;
+    }
+    setTags((prev) => [...prev, t]);
+    setTagInput('');
+  };
+
+  const removeTag = (tag: string) => setTags((prev) => prev.filter((x) => x !== tag));
+
   const handleUpload = async () => {
     if (!title || !file) {
       toast.error("MISSION INCOMPLETE", { description: "Title and file are mandatory." });
       return;
     }
-    if (contentType === 'long' && videoDurationSeconds && videoDurationSeconds > 3600) {
+    if (!thumbnailFile) {
+      toast.error("THUMBNAIL REQUIRED", { description: "Upload a thumbnail image or the video cannot be published." });
+      return;
+    }
+    if (studioTab === 'live') {
+      toast.error('Switch to Long video or Reels to publish a recording.');
+      return;
+    }
+    if (studioTab === 'long' && videoDurationSeconds && videoDurationSeconds > 3600) {
       toast.error("DURATION LIMIT EXCEEDED", { description: "Long videos must be 60 minutes or less." });
       return;
     }
@@ -226,12 +285,10 @@ const Studio = () => {
       const formData = new FormData();
       formData.append('title', title);
       formData.append('description', description);
-      formData.append('video_type', contentType);
+      formData.append('video_type', studioTab === 'short' ? 'short' : 'long');
       formData.append('video_file', file);
       formData.append('duration_seconds', String(Math.round(videoDurationSeconds || 0)));
-      if (thumbnailFile) {
-        formData.append('thumbnail', thumbnailFile);
-      }
+      formData.append('thumbnail', thumbnailFile);
 
       if (betTriggers.length > 0) {
         formData.append('bet_markers', JSON.stringify(betTriggers.map(b => ({
@@ -251,46 +308,101 @@ const Studio = () => {
         description: "Your video has been successfully uploaded to the platform." 
       });
       navigate('/profile');
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Upload failed:', error);
-      toast.error("UPLOAD FAILED", { description: "An error occurred while communicating with the server." });
+      const ax = error as { response?: { data?: Record<string, unknown> } };
+      const data = ax.response?.data;
+      const thumbErr =
+        data &&
+        typeof data === 'object' &&
+        'thumbnail' in data &&
+        Array.isArray((data as { thumbnail?: string[] }).thumbnail)
+          ? (data as { thumbnail: string[] }).thumbnail[0]
+          : null;
+      toast.error("UPLOAD FAILED", {
+        description:
+          thumbErr ||
+          (typeof data === 'object' && data && 'detail' in data && typeof (data as { detail?: string }).detail === 'string'
+            ? (data as { detail: string }).detail
+            : "An error occurred while communicating with the server."),
+      });
     } finally {
       setIsUploading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-void lg:p-10 p-4 space-y-10">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-        <div className="space-y-1">
-          <h1 className="text-4xl font-black text-white italic tracking-tighter uppercase leading-none">Creator Studio</h1>
-          <p className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.3em]">Manage and Upload Content</p>
-        </div>
-        
-        <div className="flex bg-white/5 p-1.5 rounded-2xl border border-white/5">
-           <button 
-             onClick={() => setContentType('long')}
-             className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-               contentType === 'long' ? "bg-neon-cyan text-black shadow-[0_0_20px_rgba(0,243,255,0.3)]" : "text-zinc-500 hover:text-white"
-             }`}
-           >
-             Long Video
-           </button>
-           <button 
-             onClick={() => setContentType('short')}
-             className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-               contentType === 'short' ? "bg-neon-pink text-white shadow-[0_0_20px_rgba(255,0,85,0.3)]" : "text-zinc-500 hover:text-white"
-             }`}
-           >
-             Shorts / Reels
-           </button>
-        </div>
-      </div>
+    <div className="studio-page min-h-full bg-zinc-50 text-zinc-900">
+      <div className="mx-auto max-w-6xl px-4 py-6 lg:px-6 lg:py-8">
+        <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-black tracking-tight text-zinc-900">
+              {studioTab === 'live' ? 'Live Studio' : 'Upload Studio'}
+            </h1>
+            <p className="mt-1 text-sm font-medium text-zinc-500">
+              {studioTab === 'live'
+                ? 'Start a broadcast from the app or send RTMP from any encoder.'
+                : 'Publish high-fidelity videos and reels to your channel'}
+            </p>
+            <div className="mt-4 inline-flex flex-wrap rounded-lg border border-zinc-200 bg-white p-1 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setStudioTab('long')}
+                className={cn(
+                  'rounded-md px-4 py-2 text-xs font-bold transition-colors',
+                  studioTab === 'long' ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50',
+                )}
+              >
+                Long video
+              </button>
+              <button
+                type="button"
+                onClick={() => setStudioTab('short')}
+                className={cn(
+                  'rounded-md px-4 py-2 text-xs font-bold transition-colors',
+                  studioTab === 'short' ? 'bg-[#FF2D55] text-white' : 'text-zinc-600 hover:bg-zinc-50',
+                )}
+              >
+                Reels
+              </button>
+              <button
+                type="button"
+                onClick={() => setStudioTab('live')}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-md px-4 py-2 text-xs font-bold transition-colors',
+                  studioTab === 'live'
+                    ? 'bg-red-600 text-white'
+                    : 'text-zinc-600 hover:bg-zinc-50',
+                )}
+              >
+                <Radio className="h-3.5 w-3.5" />
+                Live
+              </button>
+            </div>
+          </div>
+          {studioTab !== 'live' ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={saveDraft}
+                className="rounded-lg border border-zinc-200 bg-white px-6 py-2.5 text-sm font-bold text-zinc-900 shadow-sm transition-colors hover:bg-zinc-50"
+              >
+                Save Draft
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleUpload()}
+                disabled={isUploading || !thumbnailFile || !file || !title.trim()}
+                className="rounded-lg bg-[#FF2D55] px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-pink-200/80 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isUploading ? 'Publishing…' : 'Publish Content'}
+              </button>
+            </div>
+          ) : null}
+        </header>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
-        {/* Left Column: Form */}
-        <div className="xl:col-span-2 space-y-8">
-          <div className="studio-creator-form-card p-8 rounded-[3rem] bg-white border-2 border-neon-cyan space-y-6 relative overflow-hidden">
+        {studioTab === 'live' ? (
+          <section className="rounded-2xl border border-zinc-100 bg-white p-6 shadow-sm space-y-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="space-y-1">
                 <h2 className="text-2xl font-black text-zinc-900 uppercase tracking-tight">Go Live Setup</h2>
@@ -366,89 +478,326 @@ const Studio = () => {
                 )}
               </>
             )}
+          </section>
+        ) : (
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+        {/* Left Column */}
+        <div className="space-y-6 lg:col-span-2">
+
+          {/* Drop zone or video preview */}
+          <div
+            className={cn(
+              'relative overflow-hidden rounded-2xl border bg-white shadow-sm transition-all',
+              previewUrl ? 'border-zinc-200' : 'border-2 border-dashed border-zinc-200',
+              isDragging && !previewUrl ? 'border-zinc-400 bg-zinc-50' : '',
+              studioTab === 'short' && previewUrl ? 'mx-auto max-w-sm' : 'w-full',
+              studioTab === 'long' ? 'aspect-video' : previewUrl ? 'aspect-[9/16]' : '',
+            )}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            {previewUrl ? (
+              <>
+                <video
+                  ref={videoRef}
+                  src={previewUrl}
+                  className="h-full w-full bg-black object-cover"
+                  controls={!previewingBet}
+                  onTimeUpdate={() => setPreviewCurrentTime(videoRef.current?.currentTime ?? 0)}
+                />
+                <div className="absolute left-4 top-4 flex gap-2">
+                  <span
+                    className={cn(
+                      'rounded-lg border px-3 py-1 text-[10px] font-black uppercase tracking-widest shadow-lg',
+                      studioTab === 'long'
+                        ? 'border-cyan-500/50 bg-cyan-400 text-black'
+                        : 'border-pink-500/50 bg-[#FF2D55] text-white',
+                    )}
+                  >
+                    {studioTab === 'long' ? 'Long video' : 'Reel'}
+                  </span>
+                </div>
+                {videoDurationSeconds != null && videoDurationSeconds > 0 ? (
+                  <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-[15] bg-gradient-to-t from-black/80 to-transparent px-4 pb-3 pt-10">
+                    <BetMarkerTimeline
+                      duration={videoDurationSeconds}
+                      currentTime={previewCurrentTime}
+                      markers={betTriggers.map((b) => ({ id: b.id, timestamp: b.timestamp }))}
+                      activeMarkerId={previewingBet?.id ?? null}
+                      label={
+                        studioTab === 'short'
+                          ? 'Reels timeline · bet markers'
+                          : 'Play timeline · bet markers'
+                      }
+                      interactive
+                      onSeek={(sec) => {
+                        if (!videoRef.current || previewingBet) return;
+                        videoRef.current.currentTime = Math.min(sec, videoRef.current.duration || sec);
+                        setPreviewCurrentTime(videoRef.current.currentTime);
+                      }}
+                    />
+                  </div>
+                ) : null}
+                <AnimatePresence>
+                  {previewingBet && (
+                    <motion.div
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 20 }}
+                      className="absolute bottom-0 right-0 top-0 z-20 flex w-full flex-col overflow-y-auto border-l border-pink-500/30 bg-zinc-950/95 p-6 shadow-[-20px_0_50px_rgba(255,0,85,0.1)] backdrop-blur-2xl sm:w-[320px] no-scrollbar"
+                    >
+                      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-pink-500 to-transparent animate-pulse" />
+                      <div className="mb-6 flex shrink-0 items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-400 shadow-[0_0_15px_rgba(0,243,255,0.4)]">
+                            <TrendingUp className="h-5 w-5 stroke-[3] text-black" />
+                          </div>
+                          <div>
+                            <h2 className="text-lg font-black uppercase italic leading-none tracking-tighter text-white">
+                              Live Market
+                            </h2>
+                            <p className="mt-1 text-[8px] font-black uppercase tracking-[0.2em] text-cyan-400">
+                              Pool: Preview
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPreviewingBet(null);
+                            videoRef.current?.play();
+                          }}
+                          className="group flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 hover:border-cyan-400/50 hover:bg-cyan-400/10"
+                        >
+                          <X className="h-4 w-4 text-zinc-500 transition-colors group-hover:text-cyan-400" />
+                        </button>
+                      </div>
+                      <div className="flex flex-1 flex-col justify-center space-y-6">
+                        <div className="group relative overflow-hidden rounded-2xl border border-white/5 bg-white/5 p-5">
+                          <p className="mb-1.5 text-[9px] font-black uppercase tracking-widest text-zinc-500">
+                            Alpha Event Preview
+                          </p>
+                          <h3 className="text-sm font-bold uppercase leading-tight tracking-tight text-zinc-100">
+                            {previewingBet.question}
+                          </h3>
+                        </div>
+                        <div
+                          className={`grid gap-3 ${previewingBet.options.length > 2 ? 'grid-cols-1' : 'grid-cols-2'}`}
+                        >
+                          {previewingBet.options?.map((opt, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-white/5 bg-white/5 p-4 text-zinc-500"
+                            >
+                              <span className="text-xl font-black italic">{opt || `OPTION ${idx + 1}`}</span>
+                              <span className="text-[8px] font-bold uppercase tracking-widest opacity-60">
+                                1.82x Boost
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="space-y-3">
+                          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Stake Amount</p>
+                          <div className="relative">
+                            <DollarSign className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-400" />
+                            <input
+                              disabled
+                              placeholder="ENTER PULSE..."
+                              className="w-full rounded-xl border border-white/5 bg-white/5 px-10 py-3 font-mono text-sm text-white outline-none placeholder:text-zinc-700"
+                            />
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled
+                          className="mt-4 flex w-full cursor-not-allowed items-center justify-center rounded-xl bg-cyan-400/50 py-4 text-sm font-black uppercase italic tracking-[0.2em] text-black grayscale"
+                        >
+                          CONFIRM POSITION
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </>
+            ) : (
+              <div className="flex flex-col items-center px-8 py-12 text-center">
+                <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-zinc-50 transition-transform group-hover:scale-110">
+                  <Upload className="h-10 w-10 text-zinc-400" />
+                </div>
+                <h3 className="text-xl font-bold text-zinc-900">Drag and drop video files to upload</h3>
+                <p className="mx-auto mt-2 max-w-xs text-sm text-zinc-500">
+                  Your videos stay private until you publish. MP4, WEBM, MOV — long videos up to 60 minutes.
+                </p>
+                <label className="mt-8 cursor-pointer rounded-full bg-zinc-900 px-8 py-3 text-sm font-bold tracking-wide text-white transition-colors hover:bg-zinc-800">
+                  Select files
+                  <input type="file" accept="video/*" className="hidden" onChange={handleFileChange} />
+                </label>
+              </div>
+            )}
           </div>
 
-           <div className="studio-creator-form-card p-8 rounded-[3rem] bg-white border-2 border-neon-pink space-y-8 relative overflow-hidden group">
-              <div className="space-y-6">
-                 <div className="space-y-2">
-                    <label className="text-[8px] font-black text-zinc-600 uppercase tracking-widest px-2">Video Title</label>
-                    <input 
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      placeholder="ENTER VIDEO TITLE..."
-                      className="studio-creator-form-field w-full bg-white border border-neon-pink/30 rounded-2xl p-5 text-sm font-black text-zinc-900 tracking-widest focus:border-neon-pink focus:ring-0 outline-none uppercase transition-all placeholder:text-zinc-400"
-                    />
-                 </div>
-
-                 <div className="space-y-2">
-                    <div className="flex justify-between px-2">
-                      <label className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Description</label>
-                      <span className={`text-[8px] font-black uppercase tracking-widest ${wordCount > maxWords ? "text-neon-pink" : "text-zinc-500"}`}>
-                        {wordCount} / {maxWords} Words
-                      </span>
-                    </div>
-                    <textarea 
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder={`ENTER VIDEO DESCRIPTION (MAX ${maxWords} WORDS)...`}
-                      className="studio-creator-form-field w-full bg-white border border-neon-pink/30 rounded-[1.5rem] p-6 text-sm font-black text-zinc-900 tracking-widest focus:border-neon-pink focus:ring-0 outline-none uppercase min-h-[150px] transition-all resize-none placeholder:text-zinc-400"
-                    />
-                 </div>
-
-                 <div className="space-y-2">
-                    <label className="text-[8px] font-black text-zinc-600 uppercase tracking-widest px-2">Thumbnail (Optional)</label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleThumbnailChange}
-                      className="studio-creator-form-field w-full bg-white border border-neon-pink/30 rounded-2xl p-4 text-xs font-black text-zinc-900 tracking-widest focus:border-neon-pink focus:ring-0 outline-none uppercase transition-all file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-[10px] file:font-black file:text-zinc-700"
-                    />
-                    {thumbnailPreviewUrl && (
-                      <div className="rounded-xl overflow-hidden border border-neon-pink/20 w-full max-w-xs">
-                        <img src={thumbnailPreviewUrl} alt="Thumbnail preview" className="w-full h-32 object-cover" />
-                      </div>
-                    )}
-                 </div>
+          {isUploading ? (
+            <div className="rounded-xl border border-zinc-100 bg-white p-6 shadow-sm">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-900 text-white">
+                    <FileVideo className="h-5 w-5" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-bold text-zinc-900">{file?.name ?? 'Uploading…'}</p>
+                    <p className="text-xs text-zinc-500">Publishing to your channel…</p>
+                  </div>
+                </div>
               </div>
-              
-              <div className="absolute top-0 right-0 w-32 h-32 bg-neon-cyan/5 blur-[50px] pointer-events-none" />
-           </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-100">
+                <div className="h-full w-2/3 animate-pulse rounded-full bg-zinc-900" />
+              </div>
+            </div>
+          ) : null}
+
+          <section className="space-y-6 rounded-2xl border border-zinc-100 bg-white p-8 shadow-sm">
+            <h3 className="flex items-center text-lg font-bold text-zinc-900">
+              <FileVideo className="mr-2 h-5 w-5 text-zinc-600" />
+              Video details
+            </h3>
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Video title</label>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Add a title that describes your video"
+                className="w-full rounded-xl border border-zinc-200 py-3 px-4 text-sm text-zinc-900 outline-none ring-zinc-900/10 placeholder:text-zinc-400 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+              />
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Description</label>
+                <span
+                  className={cn(
+                    'text-xs font-semibold',
+                    wordCount > maxWords ? 'text-[#FF2D55]' : 'text-zinc-400',
+                  )}
+                >
+                  {wordCount} / {maxWords} words
+                </span>
+              </div>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Tell viewers about your video"
+                rows={4}
+                className="w-full resize-none rounded-xl border border-zinc-200 py-3 px-4 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label htmlFor="studio-category-input" className="text-xs font-bold uppercase tracking-widest text-zinc-400">
+                  Category
+                </label>
+                <input
+                  id="studio-category-input"
+                  type="text"
+                  list="studio-category-presets"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  placeholder="Choose or type a category"
+                  autoComplete="off"
+                  className="w-full rounded-xl border border-zinc-200 bg-white py-3 px-4 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+                />
+                <datalist id="studio-category-presets">
+                  {CATEGORY_PRESETS.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+                <p className="text-[11px] text-zinc-400">Pick a suggestion from the list or enter any category.</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Visibility</label>
+                <select
+                  value={visibility}
+                  onChange={(e) => setVisibility(e.target.value)}
+                  className="w-full appearance-none rounded-xl border border-zinc-200 bg-white py-3 px-4 text-sm text-zinc-900 outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+                >
+                  <option value="public">Public</option>
+                  <option value="private">Private</option>
+                  <option value="unlisted">Unlisted</option>
+                </select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Tags</label>
+              <div className="flex flex-wrap gap-2 rounded-xl border border-zinc-200 p-3">
+                {tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="flex items-center rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-700"
+                  >
+                    #{tag}
+                    <button
+                      type="button"
+                      onClick={() => removeTag(tag)}
+                      className="ml-1 text-zinc-500 hover:text-zinc-900"
+                      aria-label={`Remove ${tag}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                <input
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addTag();
+                    }
+                  }}
+                  placeholder="Add tag…"
+                  className="min-w-[120px] flex-1 border-0 bg-transparent p-0 text-xs outline-none ring-0 placeholder:text-zinc-400"
+                />
+              </div>
+              <p className="text-[11px] text-zinc-400">Press Enter to add. Stored locally with your draft.</p>
+            </div>
+          </section>
 
           {/* Timeline & Bet Manager */}
           {previewUrl && (
-             <div className="p-8 rounded-[3rem] bg-white border-2 border-neon-pink space-y-8">
-                <div className="flex items-center justify-between">
+             <div className="space-y-6 rounded-2xl border border-zinc-100 bg-white p-6 shadow-sm">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                    <div className="space-y-1">
-                      <h3 className="text-xl font-black text-zinc-900 italic uppercase tracking-tighter">Market Timeline</h3>
-                      <p className="text-[8px] text-zinc-600 font-black uppercase tracking-widest">
-                        Pin bets on the scrubber for long uploads and reels. Use play controls to seek, then DRIP TRIGGER.
+                      <h3 className="text-lg font-bold text-zinc-900">Market timeline</h3>
+                      <p className="text-xs text-zinc-500">
+                        Pin bets on the scrubber for long uploads and reels. Seek the preview, then add a trigger.
                       </p>
                    </div>
                    <button 
+                     type="button"
                      onClick={addBetTrigger}
-                     className="flex items-center gap-2 px-6 py-3 bg-neon-purple text-white text-[10px] font-black rounded-xl uppercase tracking-widest hover:brightness-110 transition-all shadow-[0_0_20px_rgba(112,0,255,0.2)]"
+                     className="flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-xs font-bold uppercase tracking-wide text-white shadow-md transition-all hover:bg-violet-700"
                    >
                      <TrendingUp className="h-4 w-4" />
-                     DRIP TRIGGER
+                     Add bet marker
                    </button>
                 </div>
 
                 <div className="space-y-4">
                    {betTriggers.length === 0 && !editingBet && (
-                     <div className="p-10 border-2 border-dashed border-white/5 rounded-[2rem] flex flex-col items-center text-center space-y-4 opacity-50">
-                        <Clock className="h-8 w-8 text-zinc-700" />
-                        <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">No Temporal Pulse Detected</p>
+                     <div className="flex flex-col items-center rounded-2xl border-2 border-dashed border-zinc-200 p-10 text-center">
+                        <Clock className="h-8 w-8 text-zinc-400" />
+                        <p className="mt-2 text-xs font-semibold uppercase tracking-widest text-zinc-500">No bet markers yet</p>
                      </div>
                    )}
 
                    <div className="space-y-3">
                       {betTriggers.map((bet) => (
-                        <div key={bet.id} className="flex items-center justify-between p-5 rounded-2xl bg-white/5 border border-white/5 group hover:border-neon-cyan/30 transition-all">
+                        <div key={bet.id} className="group flex items-center justify-between rounded-2xl border border-zinc-100 bg-zinc-50 p-4 transition-all hover:border-cyan-500/40">
                            <div className="flex items-center gap-4">
-                              <div className="px-3 py-1 rounded-lg bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan text-[10px] font-mono font-black">
+                              <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 font-mono text-[10px] font-black text-cyan-700">
                                  {bet.timestamp.toFixed(1)}s
                               </div>
-                              <span className="text-xs font-bold text-white uppercase tracking-tight">{bet.question}</span>
+                              <span className="text-sm font-semibold text-zinc-900">{bet.question}</span>
                            </div>
                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
                               <button 
@@ -539,182 +888,156 @@ const Studio = () => {
            )}
         </div>
 
-        {/* Right Column: Preview & Upload */}
-        <div className="space-y-8">
-           <div className={cn(
-               "rounded-[2.5rem] bg-zinc-950 border relative overflow-hidden flex flex-col items-center justify-center group shadow-2xl transition-all duration-500",
-               contentType === 'long' ? "aspect-video w-full" : "aspect-[9/16] w-full max-w-[360px] mx-auto",
-               isDragging ? "border-neon-cyan bg-neon-cyan/5 scale-[1.02]" : "border-white/5"
-             )}
-             onDragOver={handleDragOver}
-             onDragLeave={handleDragLeave}
-             onDrop={handleDrop}
-           >
-              {previewUrl ? (
-                <>
-                  <video 
-                    ref={videoRef}
-                    src={previewUrl} 
-                    className="w-full h-full object-cover opacity-80"
-                    controls={!previewingBet}
-                    onTimeUpdate={() => setPreviewCurrentTime(videoRef.current?.currentTime ?? 0)}
-                  />
-                  <div className="absolute top-6 left-6 flex gap-2">
-                     <div className={cn(
-                       "px-4 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest shadow-xl border",
-                       contentType === 'long' ? "bg-neon-cyan border-neon-cyan/50 text-black" : "bg-neon-pink border-neon-pink/50 text-white"
-                     )}>
-                        {contentType === 'long' ? 'Transmission' : 'Velocity'}
-                     </div>
-                  </div>
-
-                  {previewUrl && videoDurationSeconds != null && videoDurationSeconds > 0 && (
-                    <div className="absolute inset-x-0 bottom-0 z-[15] px-4 pb-3 pt-10 bg-gradient-to-t from-black/80 to-transparent pointer-events-auto">
-                      <BetMarkerTimeline
-                        duration={videoDurationSeconds}
-                        currentTime={previewCurrentTime}
-                        markers={betTriggers.map((b) => ({ id: b.id, timestamp: b.timestamp }))}
-                        activeMarkerId={previewingBet?.id ?? null}
-                        label={contentType === 'short' ? 'Reels timeline · bet markers' : 'Play timeline · bet markers'}
-                        interactive
-                        onSeek={(sec) => {
-                          if (!videoRef.current || previewingBet) return;
-                          videoRef.current.currentTime = Math.min(sec, videoRef.current.duration || sec);
-                          setPreviewCurrentTime(videoRef.current.currentTime);
-                        }}
-                      />
-                    </div>
-                  )}
-
-                  <AnimatePresence>
-                    {previewingBet && (
-                      <motion.div
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 20 }}
-                        className="absolute right-0 top-0 bottom-0 w-full sm:w-[320px] bg-zinc-950/95 backdrop-blur-2xl border-l border-neon-pink/30 p-6 flex flex-col z-20 shadow-[-20px_0_50px_rgba(255,0,85,0.1)] overflow-y-auto no-scrollbar"
-                      >
-                        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-neon-pink to-transparent animate-pulse" />
-
-                        <div className="mb-6 flex items-center justify-between shrink-0">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-neon-cyan shadow-[0_0_15px_rgba(0,243,255,0.4)]">
-                              <TrendingUp className="h-5 w-5 text-black stroke-[3]" />
-                            </div>
-                            <div>
-                              <h2 className="text-lg font-black tracking-tighter text-white uppercase italic leading-none">Live Market</h2>
-                              <p className="text-[8px] font-black tracking-[0.2em] text-neon-cyan uppercase mt-1">Pool: Preview</p>
-                            </div>
-                          </div>
-                          <button 
-                            onClick={() => {
-                              setPreviewingBet(null);
-                              videoRef.current?.play();
-                            }}
-                            className="h-8 w-8 rounded-full bg-white/5 flex items-center justify-center border border-white/10 group hover:border-neon-cyan/50 hover:bg-neon-cyan/10 transition-all"
-                          >
-                            <X className="h-4 w-4 text-zinc-500 group-hover:text-neon-cyan transition-colors" />
-                          </button>
-                        </div>
-
-                        <div className="space-y-6 flex-1 flex flex-col justify-center">
-                          <div className="p-5 rounded-2xl bg-white/5 border border-white/5 relative overflow-hidden group">
-                            <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-1.5">Alpha Event Preview</p>
-                            <h3 className="text-sm font-bold text-zinc-100 leading-tight tracking-tight uppercase">{previewingBet.question}</h3>
-                          </div>
-
-                          <div className={`grid gap-3 ${previewingBet.options.length > 2 ? 'grid-cols-1' : 'grid-cols-2'}`}>
-                            {previewingBet.options?.map((opt, idx) => (
-                              <button key={idx} className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-white/5 bg-white/5 p-4 text-zinc-500">
-                                <span className="text-xl font-black italic">{opt || `OPTION ${idx + 1}`}</span>
-                                <span className="text-[8px] font-bold opacity-60 uppercase tracking-widest">1.82x Boost</span>
-                              </button>
-                            ))}
-                          </div>
-
-                          <div className="space-y-3">
-                            <p className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.2em]">Stake Amount</p>
-                            <div className="relative group">
-                              <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-neon-cyan" />
-                              <input 
-                                disabled
-                                placeholder="ENTER PULSE..." 
-                                className="w-full rounded-xl bg-white/5 px-10 py-3 text-sm font-mono outline-none border border-white/5 text-white placeholder:text-zinc-700"
-                              />
-                            </div>
-                          </div>
-
-                          <button 
-                            disabled
-                            className="w-full py-4 rounded-xl bg-neon-cyan/50 font-black text-black text-sm tracking-[0.2em] uppercase italic flex items-center justify-center grayscale cursor-not-allowed mt-4"
-                          >
-                            CONFIRM POSITION
-                          </button>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </>
-              ) : (
-                <div className="flex flex-col items-center space-y-6">
-                   <div className="h-24 w-24 rounded-[2rem] bg-white/5 border border-white/10 flex items-center justify-center group-hover:border-neon-cyan/50 transition-all">
-                      <Upload className="h-8 w-8 text-zinc-500 group-hover:text-neon-cyan" />
-                   </div>
-                   <div className="text-center space-y-1">
-                      <p className="text-[10px] font-black text-white uppercase tracking-widest">DRAG MEDIA TO UPLOAD</p>
-                      <p className="text-[8px] font-bold text-zinc-600 uppercase tracking-[0.2em]">MP4, WEBM, MOV (LONG VIDEOS: UP TO 60 MIN)</p>
-                   </div>
-                   <input 
-                     type="file" 
-                     accept="video/*" 
-                     className="absolute inset-0 opacity-0 cursor-pointer"
-                     onChange={handleFileChange}
-                   />
-                </div>
-              )}
-           </div>
-
-           <div className="space-y-4">
-              <button 
-                onClick={handleUpload}
-                disabled={isUploading}
-                className="w-full py-5 bg-white text-black font-black uppercase tracking-[.2em] text-sm rounded-2xl shadow-[0_0_50px_rgba(255,255,255,0.1)] hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-3"
+        {/* Right column: thumbnail, tips, toggles */}
+        <div className="space-y-6">
+          <section className="rounded-2xl border border-zinc-100 bg-white p-6 shadow-sm">
+            <h3 className="mb-1 flex items-center text-base font-bold text-zinc-900">
+              <ImagePlus className="mr-2 h-5 w-5" />
+              Thumbnail
+            </h3>
+            <p className="mb-4 text-xs text-zinc-500">
+              Select or upload a picture that shows what&apos;s in your video.
+            </p>
+            <div className="mb-4 grid grid-cols-2 gap-3">
+              <label className="flex aspect-video cursor-pointer flex-col items-center justify-center overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 transition-colors hover:border-zinc-900">
+                <input
+                  id="studio-thumb-input"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleThumbnailChange}
+                />
+                <ImagePlus className="mb-1 h-6 w-6 text-zinc-400" />
+                <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Custom</span>
+              </label>
+              <div
+                className={cn(
+                  'relative aspect-video cursor-pointer overflow-hidden rounded-lg border-2 bg-zinc-200 transition-colors',
+                  thumbnailFile ? 'border-zinc-900' : 'border-transparent hover:opacity-90'
+                )}
+                onClick={() => document.getElementById('studio-thumb-input')?.click()}
               >
-                {isUploading ? (
+                {thumbnailPreviewUrl ? (
                   <>
-                    <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="h-5 w-5 border-2 border-black border-t-transparent rounded-full" />
-                    UPLOADING...
+                    <img src={thumbnailPreviewUrl} alt="" className="h-full w-full object-cover opacity-90" />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                      <CheckCircle2 className="h-8 w-8 text-white drop-shadow-md" />
+                    </div>
                   </>
                 ) : (
-                  <>
-                    <CheckCircle2 className="h-5 w-5" />
-                    UPLOAD VIDEO
-                  </>
+                  <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-zinc-500">
+                    Pick image
+                  </div>
                 )}
-              </button>
-              <button 
-                onClick={() => navigate('/profile')}
-                className="w-full py-5 bg-white/5 border border-white/5 text-zinc-500 font-black uppercase tracking-widest text-[10px] rounded-2xl hover:bg-white/10 transition-all"
-              >
-                CANCEL
-              </button>
-           </div>
-
-           <div className="p-6 rounded-[2rem] bg-amber-500/5 border border-amber-500/10 flex items-start gap-4">
-              <ShieldAlert className="h-5 w-5 text-amber-500 shrink-0" />
-              <div className="space-y-1">
-                 <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Operative Protocol</p>
-                 <p className="text-[8px] font-bold text-zinc-500 leading-normal uppercase">BY INITIATING THIS BROADCAST, YOU VERIFY THAT NO INTEL IS CLASSIFIED ILLEGALLY AND ADHERE TO GRID HARMONY GUIDELINES.</p>
               </div>
-           </div>
+              <div className="aspect-video cursor-pointer overflow-hidden rounded-lg bg-zinc-300 opacity-80 transition-opacity hover:opacity-100" />
+              <div className="aspect-video cursor-pointer overflow-hidden rounded-lg bg-zinc-400 opacity-80 transition-opacity hover:opacity-100" />
+            </div>
+            <button
+              type="button"
+              onClick={() => document.getElementById('studio-thumb-input')?.click()}
+              className="w-full rounded-lg border border-zinc-200 py-2.5 text-sm font-bold transition-colors hover:bg-zinc-50"
+            >
+              Upload custom thumbnail
+            </button>
+          </section>
+
+          <div className="rounded-2xl bg-zinc-900 p-6 text-white shadow-xl">
+            <div className="mb-4 flex items-center space-x-3">
+              <div className="rounded-lg bg-zinc-800 p-2">
+                <Info className="h-5 w-5 text-zinc-400" />
+              </div>
+              <h4 className="text-sm font-bold">Optimization tips</h4>
+            </div>
+            <ul className="space-y-3 text-xs leading-relaxed text-zinc-400">
+              <li className="flex items-start">
+                <span className="mr-2 font-bold text-zinc-200">01.</span>
+                Keep titles under 60 characters for better mobile visibility.
+              </li>
+              <li className="flex items-start">
+                <span className="mr-2 font-bold text-zinc-200">02.</span>
+                Add at least 3 descriptive tags to improve search ranking.
+              </li>
+              <li className="flex items-start">
+                <span className="mr-2 font-bold text-zinc-200">03.</span>
+                High-contrast thumbnails get more clicks on average.
+              </li>
+            </ul>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-zinc-100 bg-white shadow-sm">
+            <button
+              type="button"
+              onClick={() => setCommentsSectionOpen((v) => !v)}
+              aria-expanded={commentsSectionOpen}
+              className="flex w-full items-center justify-between gap-3 p-4 text-left transition-colors hover:bg-zinc-50"
+            >
+              <div className="flex min-w-0 items-center space-x-3">
+                <MessageCircle className="h-5 w-5 shrink-0 text-zinc-500" />
+                <div className="min-w-0">
+                  <span className="block text-sm font-medium text-zinc-900">Comments</span>
+                  <span className="text-xs text-zinc-500">
+                    {commentsEnabled ? 'Viewers can comment' : 'Comments are hidden'}
+                  </span>
+                </div>
+              </div>
+              <ChevronDown
+                className={cn(
+                  'h-5 w-5 shrink-0 text-zinc-400 transition-transform duration-200',
+                  commentsSectionOpen && 'rotate-180',
+                )}
+              />
+            </button>
+            <AnimatePresence initial={false}>
+              {commentsSectionOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden border-t border-zinc-100"
+                >
+                  <div className="flex items-center justify-between gap-4 p-4 pt-3">
+                    <span className="text-sm font-medium text-zinc-900">Enable comments</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={commentsEnabled}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCommentsEnabled((v) => !v);
+                      }}
+                      className={cn(
+                        'relative h-5 w-10 shrink-0 rounded-full transition-colors',
+                        commentsEnabled ? 'bg-zinc-900' : 'bg-zinc-200',
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all',
+                          commentsEnabled ? 'right-0.5' : 'left-0.5',
+                        )}
+                      />
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => navigate('/profile')}
+            className="w-full rounded-xl border border-zinc-200 bg-white py-3 text-sm font-bold text-zinc-700 transition-colors hover:bg-zinc-50"
+          >
+            Cancel
+          </button>
         </div>
+        </div>
+        )}
       </div>
     </div>
   );
 };
-
-function cn(...inputs: any[]) {
-  return inputs.filter(Boolean).join(' ');
-}
 
 export default Studio;

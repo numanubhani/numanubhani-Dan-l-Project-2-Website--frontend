@@ -14,14 +14,29 @@ import {
   Trash2,
 } from 'lucide-react';
 import { VideoCard } from '../components/common/VideoCard';
+import { MarketCard } from '../components/common/MarketCard';
 import { motion, AnimatePresence } from 'motion/react';
 import { api } from '../services/api';
+import { fetchMarkets, voteMarket } from '../services/predictionMarkets';
+import type { Market } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
 import LivePlayerChat from '../components/live/LivePlayerChat';
 
 function cn(...inputs: any[]) {
   return inputs.filter(Boolean).join(' ');
+}
+
+function fmtCount(raw: unknown): string {
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n) || n < 0) return '0';
+  return n.toLocaleString();
+}
+
+function fmtBalance(raw: unknown): string {
+  const n = typeof raw === 'string' ? parseFloat(raw) : Number(raw);
+  const v = Number.isFinite(n) ? n : 0;
+  return `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 const Profile = () => {
@@ -50,6 +65,9 @@ const Profile = () => {
   const [liveStream, setLiveStream] = useState<any>(null);
   const [liveLoading, setLiveLoading] = useState(false);
   const [resolvedUserId, setResolvedUserId] = useState<string | null>(null);
+  const [followLoading, setFollowLoading] = useState(false);
+  const [profileMarkets, setProfileMarkets] = useState<Market[]>([]);
+  const [marketsLoading, setMarketsLoading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   // If no ID is provided, assume it's the current user's profile
@@ -120,6 +138,25 @@ const Profile = () => {
   }, [targetId, isOwnProfile]);
 
   useEffect(() => {
+    if (activeTab !== 'markets' || !targetId) return;
+    let cancelled = false;
+    setMarketsLoading(true);
+    fetchMarkets({ creator: targetId })
+      .then((list) => {
+        if (!cancelled) setProfileMarkets(list);
+      })
+      .catch(() => {
+        if (!cancelled) setProfileMarkets([]);
+      })
+      .finally(() => {
+        if (!cancelled) setMarketsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, targetId]);
+
+  useEffect(() => {
     const fetchChannelStream = async () => {
       if (!profileData?.username) return;
       try {
@@ -146,10 +183,34 @@ const Profile = () => {
   }
 
   const stats = [
-    { label: 'Subscribers', value: profileData.followers_count || '0', icon: Users },
-    { label: 'Following', value: profileData.following_count || '0', icon: Users },
-    { label: 'Pulse Balance', value: `$${(profileData.balance || 0).toLocaleString()}`, icon: TrendingUp },
+    { label: 'Subscribers', value: fmtCount(profileData.followers_count), icon: Users },
+    { label: 'Following', value: fmtCount(profileData.following_count), icon: Users },
+    { label: 'Pulse Balance', value: fmtBalance(profileData.balance), icon: TrendingUp },
   ];
+
+  const registerProfileMarketVote = async (marketId: string, side: 'yes' | 'no') => {
+    try {
+      const updated = await voteMarket(marketId, side);
+      setProfileMarkets((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+    } catch (e: unknown) {
+      const st = (e as { response?: { status?: number } }).response?.status;
+      if (st === 400) {
+        if (targetId) {
+          try {
+            const list = await fetchMarkets({ creator: targetId });
+            setProfileMarkets(list);
+          } catch {
+            /* ignore */
+          }
+        }
+        toast.message('Already voted', {
+          description: 'Each account gets one vote per market.',
+        });
+        return;
+      }
+      toast.error('Sign in to vote', { description: 'Log in to record your vote.' });
+    }
+  };
 
   const handleAvatarPick = () => {
     if (!isOwnProfile || uploadingAvatar) return;
@@ -285,6 +346,33 @@ const Profile = () => {
     }
   };
 
+  const handleFollowToggle = async () => {
+    if (!targetId || isOwnProfile) return;
+    if (!currentUser) {
+      toast.message('Sign in to subscribe.');
+      navigate('/login');
+      return;
+    }
+    try {
+      setFollowLoading(true);
+      const res = await api.post<{ message: string; is_following: boolean }>(
+        `/follow/${targetId}/`
+      );
+
+      const profileRes = await api.get(`/profile/${targetId}/`);
+      setProfileData(profileRes.data);
+
+      await refreshProfile();
+      toast.success(res.data.is_following ? 'Subscribed' : 'Unsubscribed');
+    } catch {
+      toast.error('Could not update subscription.');
+    } finally {
+      setFollowLoading(false);
+    }
+  };
+
+  const isSubscribedToThisChannel = Boolean(profileData?.is_following);
+
   return (
     <div className="min-h-screen">
       {/* Header / Banner Area */}
@@ -359,8 +447,17 @@ const Profile = () => {
                  </div>
               </>
             ) : (
-              <button className="flex items-center gap-3 rounded-2xl bg-neon-cyan px-6 lg:px-8 py-3 lg:py-4 text-[10px] font-black text-black transition-all hover:brightness-110 active:scale-95 uppercase tracking-widest shadow-[0_0_20px_rgba(0,243,255,0.3)]">
-                SUBSCRIBE
+              <button
+                type="button"
+                disabled={followLoading || !targetId}
+                onClick={() => void handleFollowToggle()}
+                className={`flex items-center gap-3 rounded-2xl px-6 lg:px-8 py-3 lg:py-4 text-[10px] font-black transition-all active:scale-95 uppercase tracking-widest disabled:opacity-60 disabled:cursor-not-allowed ${
+                  isSubscribedToThisChannel
+                    ? 'border border-white/15 bg-white/5 text-zinc-200 hover:bg-white/10'
+                    : 'bg-neon-cyan text-black hover:brightness-110 shadow-[0_0_20px_rgba(0,243,255,0.3)]'
+                }`}
+              >
+                {followLoading ? '…' : isSubscribedToThisChannel ? 'Subscribed' : 'Subscribe'}
               </button>
             )}
           </div>
@@ -417,7 +514,7 @@ const Profile = () => {
           )}
 
            {activeTab === 'videos' && (
-             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                {userVideos.length > 0 ? (
                  userVideos.map(v => (
                    <div key={v.id} className="relative">
@@ -456,7 +553,7 @@ const Profile = () => {
                          )}
                        </div>
                      )}
-                     <VideoCard video={v} />
+                     <VideoCard video={v} hideOverflowMenu={isOwnProfile} />
                    </div>
                  ))
                ) : (
@@ -532,10 +629,32 @@ const Profile = () => {
            )}
 
            {activeTab === 'markets' && (
-             <div className="flex flex-col items-center justify-center py-20 text-center">
-                <TrendingUp className="h-16 w-16 text-zinc-800 mb-4" />
-                <h3 className="text-xl font-bold text-zinc-100">No active trades</h3>
-                <p className="text-sm text-zinc-500 max-w-xs mt-2">No participation in prediction markets yet.</p>
+             <div className="w-full">
+               {marketsLoading ? (
+                 <div className="flex justify-center py-20">
+                   <div className="h-8 w-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin" />
+                 </div>
+               ) : profileMarkets.length > 0 ? (
+                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                   {profileMarkets.map((market) => (
+                     <MarketCard
+                       key={market.id}
+                       market={market}
+                       onVote={(side) => registerProfileMarketVote(market.id, side)}
+                     />
+                   ))}
+                 </div>
+               ) : (
+                 <div className="flex flex-col items-center justify-center py-20 text-center">
+                   <TrendingUp className="h-16 w-16 text-zinc-800 mb-4" />
+                   <h3 className="text-xl font-bold text-zinc-100">No markets yet</h3>
+                   <p className="text-sm text-zinc-500 max-w-xs mt-2">
+                     {isOwnProfile
+                       ? 'Create prediction markets from the Markets page.'
+                       : 'This channel has no published prediction markets.'}
+                   </p>
+                 </div>
+               )}
              </div>
            )}
 

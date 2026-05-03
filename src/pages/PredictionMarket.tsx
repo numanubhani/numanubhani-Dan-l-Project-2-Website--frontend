@@ -1,12 +1,51 @@
-import React, { useState } from 'react';
-import { mockMarkets } from '../mockData';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { MarketCard } from '../components/common/MarketCard';
-import { TrendingUp, Search, Filter, Globe, Cpu, User } from 'lucide-react';
-import { motion } from 'motion/react';
+import { CreateMarketModal } from '../components/common/CreateMarketModal';
+import { Market } from '../types';
+import { fetchMarkets, voteMarket } from '../services/predictionMarkets';
+import { TrendingUp, Search } from 'lucide-react';
+import { toast } from 'sonner';
 
 const PredictionMarket = () => {
   const [activeCategory, setActiveCategory] = useState('All');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [markets, setMarkets] = useState<Market[]>([]);
   const categories = ['All', 'Politics', 'Crypto', 'Sports', 'Gaming', 'Entertainment'];
+
+  const loadMarkets = useCallback(async () => {
+    try {
+      const list = await fetchMarkets();
+      setMarkets(list);
+    } catch {
+      toast.error('Could not load markets', { description: 'Check that the API is running.' });
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMarkets();
+  }, [loadMarkets]);
+
+  const visibleMarkets = useMemo(() => {
+    if (activeCategory === 'All') return markets;
+    return markets.filter((m) => m.category === activeCategory);
+  }, [markets, activeCategory]);
+
+  const registerVote = async (marketId: string, side: 'yes' | 'no') => {
+    try {
+      const updated = await voteMarket(marketId, side);
+      setMarkets((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+    } catch (e: unknown) {
+      const st = (e as { response?: { status?: number } }).response?.status;
+      if (st === 400) {
+        await loadMarkets();
+        toast.message('Already voted', {
+          description: 'Each account gets one vote per market.',
+        });
+        return;
+      }
+      toast.error('Vote not recorded', { description: 'Sign in to vote on markets.' });
+    }
+  };
 
   return (
     <div className="p-4 lg:p-8 space-y-8">
@@ -25,12 +64,24 @@ const PredictionMarket = () => {
            <button className="flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-6 py-3 text-sm font-bold hover:bg-white/10 transition-all">
              My Trades
            </button>
-           <button className="flex items-center gap-2 rounded-xl bg-cyan-vpulse text-black px-6 py-3 text-sm font-bold hover:bg-cyan-400 transition-all shadow-xl shadow-cyan-500/20 active:scale-95">
+           <button
+             type="button"
+             onClick={() => setCreateOpen(true)}
+             className="flex items-center gap-2 rounded-xl bg-cyan-vpulse text-white px-6 py-3 text-sm font-bold transition-all shadow-xl shadow-cyan-500/20 hover:bg-cyan-400 hover:text-black active:scale-95"
+           >
              <TrendingUp className="h-4 w-4" />
              Create Market
            </button>
         </div>
       </div>
+
+      <CreateMarketModal
+        isOpen={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreate={(market) =>
+          setMarkets((prev) => [market, ...prev.filter((m) => m.id !== market.id)])
+        }
+      />
 
       {/* Discovery / Filter Rail */}
       <div className="flex flex-col md:flex-row md:items-center gap-4 border-b border-white/5 pb-6">
@@ -63,42 +114,22 @@ const PredictionMarket = () => {
       </div>
 
       {/* Grid of Markets */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {mockMarkets.map((market) => (
-          <MarketCard key={market.id} market={market} />
-        ))}
-        {/* Fill for visual density */}
-        {[...mockMarkets, ...mockMarkets, ...mockMarkets].map((market, i) => (
-          <MarketCard key={`${market.id}-${i}`} market={market} />
-        ))}
-      </div>
-
-      {/* Ecosystem Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-12">
-         <div className="rounded-3xl bg-gradient-to-br from-purple-vpulse/40 to-void p-10 border border-white/10 relative overflow-hidden group">
-            <div className="relative z-10 space-y-4">
-               <Globe className="h-10 w-10 text-purple-vpulse" />
-               <h2 className="text-3xl font-black uppercase tracking-tighter">Decentralized Trust</h2>
-               <p className="text-zinc-400 font-medium max-w-md">VPULSE markets use community-driven evidence to resolve outcomes. No central middleman, just pure prediction.</p>
-               <button className="px-8 py-3 rounded-xl bg-white text-black font-black uppercase tracking-widest text-sm hover:scale-105 active:scale-95 transition-all shadow-xl shadow-white/5">
-                 Learn How It Works
-               </button>
-            </div>
-            <div className="absolute -top-10 -right-10 h-64 w-64 bg-purple-600 rounded-full blur-[100px] opacity-10 group-hover:opacity-30 transition-opacity" />
-         </div>
-
-         <div className="rounded-3xl bg-gradient-to-br from-cyan-vpulse/40 to-void p-10 border border-white/10 relative overflow-hidden group">
-            <div className="relative z-10 space-y-4">
-               <Cpu className="h-10 w-10 text-cyan-vpulse" />
-               <h2 className="text-3xl font-black uppercase tracking-tighter">Creator Odds</h2>
-               <p className="text-zinc-400 font-medium max-w-md">Apply for Pro Creator status to launch exclusive markets for your community and earn a percentage of the volume.</p>
-               <button className="px-8 py-3 rounded-xl bg-cyan-vpulse text-black font-black uppercase tracking-widest text-sm hover:scale-105 active:scale-95 transition-all shadow-xl shadow-cyan-500/20">
-                 Apply for Pro
-               </button>
-            </div>
-             <div className="absolute -top-10 -right-10 h-64 w-64 bg-cyan-400 rounded-full blur-[100px] opacity-10 group-hover:opacity-30 transition-opacity" />
-         </div>
-      </div>
+      {visibleMarkets.length > 0 ? (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {visibleMarkets.map((market) => (
+            <MarketCard
+              key={market.id}
+              market={market}
+              onVote={(side) => registerVote(market.id, side)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-3xl border border-dashed border-white/15 bg-white/[0.02] px-8 py-16 text-center">
+          <p className="text-sm font-bold text-zinc-400">No markets yet.</p>
+          <p className="mt-2 text-xs text-zinc-600">Create a market to see it listed here.</p>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { User, Video, Market, Product } from './types';
+import { User, Video, Product } from './types';
 
 export const mockUser: User = {
   id: 'u1',
@@ -66,27 +66,6 @@ export const mockVideos: Video[] = [
     duration: 600,
     type: 'long',
     createdAt: '1 day ago'
-  }
-];
-
-export const mockMarkets: Market[] = [
-  {
-    id: 'm1',
-    title: 'Will AI surpass human coding by 2027?',
-    category: 'Crypto',
-    probability: 68,
-    volume: 1250000,
-    endDate: 'Dec 31, 2026',
-    image: 'https://picsum.photos/seed/ai/400/200'
-  },
-  {
-    id: 'm2',
-    title: 'Next Mars Mission Launch Date',
-    category: 'Crypto',
-    probability: 42,
-    volume: 850000,
-    endDate: 'Nov 15, 2026',
-    image: 'https://picsum.photos/seed/space/400/200'
   }
 ];
 

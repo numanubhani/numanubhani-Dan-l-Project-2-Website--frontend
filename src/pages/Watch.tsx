@@ -1,17 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Bell, MessageSquare, Send, ThumbsUp, TrendingUp } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { toast } from 'sonner';
 import { api } from '../services/api';
 import { BetMarkerTimeline, maxAllowedTimeBeforeNextBet } from '../components/common/BetMarkerTimeline';
+import { useAuth } from '../contexts/AuthContext';
 
 const Watch = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const { user: currentUser, refreshProfile } = useAuth();
 
   const [video, setVideo] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [followLoading, setFollowLoading] = useState(false);
   const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState('');
   const [postingComment, setPostingComment] = useState(false);
@@ -25,9 +30,15 @@ const Watch = () => {
   const [mediaDuration, setMediaDuration] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
 
+  const creatorId = video?.creator?.id ?? video?.creator ?? null;
   const isLive = !!video?.is_live;
+  const subscribedToCreator = Boolean(video?.is_following_creator);
+  const isOwnVideo =
+    !!(currentUser && creatorId && String(currentUser.id) === String(creatorId));
   const mediaUrl = video?.video_file_url || video?.video_url || '';
   const markers = Array.isArray(video?.bet_markers) ? video.bet_markers : [];
+  const autoplayFromNotification =
+    searchParams.get('autoplay') === '1' || searchParams.get('autoplay') === 'true';
   useEffect(() => {
     placedRef.current = markersWithBetPlaced;
   }, [markersWithBetPlaced]);
@@ -36,6 +47,30 @@ const Watch = () => {
     setMediaDuration(0);
     setTimelineNow(0);
   }, [id]);
+
+  useEffect(() => {
+    if (!autoplayFromNotification || isLive || !mediaUrl || loading) return;
+
+    let cancelled = false;
+    const raf = requestAnimationFrame(() => {
+      if (cancelled) return;
+      const el = videoRef.current;
+      if (!el) return;
+      const tryPlay = () => {
+        if (cancelled) return;
+        void el.play().catch(() => {
+          /* Browser may still block autoplay without a user gesture */
+        });
+      };
+      if (el.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) tryPlay();
+      else el.addEventListener('canplay', tryPlay, { once: true });
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [autoplayFromNotification, isLive, mediaUrl, loading, id]);
 
   const activeTimelineMarker = activeTimelineMarkerId
     ? markers.find((marker: any) => marker.id === activeTimelineMarkerId) || null
@@ -73,7 +108,35 @@ const Watch = () => {
       }
     };
     loadWatchData();
-  }, [id]);
+  }, [id, currentUser?.id]);
+
+  const handleFollowCreator = async () => {
+    const vid = video?.id ?? id;
+    if (!creatorId || !vid) return;
+    if (!currentUser) {
+      toast.message('Sign in to subscribe.');
+      navigate('/login');
+      return;
+    }
+    if (currentUser.id === creatorId) {
+      toast.message('This is your video.');
+      return;
+    }
+    try {
+      setFollowLoading(true);
+      const res = await api.post<{ is_following: boolean }>(`/follow/${creatorId}/`);
+
+      const videoRes = await api.get(`/videos/${vid}/`);
+      setVideo(videoRes.data);
+
+      await refreshProfile();
+      toast.success(res.data.is_following ? 'Subscribed' : 'Unsubscribed');
+    } catch {
+      toast.error('Could not update subscription.');
+    } finally {
+      setFollowLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!video?.id) return;
@@ -153,6 +216,7 @@ const Watch = () => {
 
   const handleVideoTimeUpdate = () => {
     if (isLive || !videoRef.current || activeTimelineMarkerId) return;
+    if (markers.length === 0) return;
     const currentTime = videoRef.current.currentTime;
     const nextMarker = markers.find((marker: any) => {
       if (!marker?.id || markersWithBetPlaced.has(marker.id)) return false;
@@ -226,7 +290,7 @@ const Watch = () => {
           ) : (
             <div className="h-full w-full flex items-center justify-center text-zinc-500">No video source found.</div>
           )}
-          {!isLive && mediaUrl && markers.length > 0 && (
+          {!isLive && mediaUrl && (
             <div className="absolute bottom-0 left-0 right-0 z-10 px-3 sm:px-4 pb-3 pt-8 bg-gradient-to-t from-black via-black/70 to-transparent pointer-events-none">
               <div className="pointer-events-auto max-w-4xl mx-auto">
                 <BetMarkerTimeline
@@ -239,7 +303,26 @@ const Watch = () => {
                   markers={markers.map((m: any) => ({ id: String(m.id), timestamp: Number(m.timestamp) || 0 }))}
                   activeMarkerId={activeTimelineMarkerId}
                   completedMarkerIds={markersWithBetPlaced}
-                  label="Timeline · bets"
+                  interactive={markers.length === 0}
+                  onSeek={
+                    markers.length === 0
+                      ? (seconds) => {
+                          if (!videoRef.current) return;
+                          const d = Math.max(
+                            mediaDuration,
+                            Number(video.duration_seconds || 0),
+                            Number(video.duration || 0),
+                          );
+                          const t =
+                            Number.isFinite(d) && d > 0
+                              ? Math.min(Math.max(0, seconds), d)
+                              : Math.max(0, seconds);
+                          videoRef.current.currentTime = t;
+                          setTimelineNow(t);
+                        }
+                      : undefined
+                  }
+                  label={markers.length > 0 ? 'Timeline · bets' : 'Timeline · scrub to seek'}
                 />
               </div>
             </div>
@@ -260,21 +343,43 @@ const Watch = () => {
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 pb-6 border-b border-white/10">
-            <div className="flex items-center gap-4">
-              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full overflow-hidden bg-zinc-900">
+            <div className="flex items-center gap-4 min-w-0">
+              <Link
+                to={creatorId ? `/profile/user/${creatorId}` : '#'}
+                className={`shrink-0 h-10 w-10 sm:h-12 sm:w-12 rounded-full overflow-hidden bg-zinc-900 ${!creatorId ? 'pointer-events-none opacity-70' : ''}`}
+              >
                 {video.creator_avatar ? (
                   <img src={video.creator_avatar} alt={video.creator_name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                 ) : (
                   <div className="h-full w-full bg-gradient-to-br from-neon-purple to-neon-pink" />
                 )}
+              </Link>
+              <div className="flex flex-col min-w-0">
+                <Link
+                  to={creatorId ? `/profile/user/${creatorId}` : '#'}
+                  className="font-bold text-white text-sm truncate hover:text-neon-cyan transition-colors"
+                >
+                  {video.creator_name || 'Creator'}
+                </Link>
+                {video.creator_username ? (
+                  <span className="text-xs text-zinc-500 truncate">@{video.creator_username}</span>
+                ) : null}
               </div>
-              <div className="flex flex-col">
-                <span className="font-bold text-white text-sm">{video.creator_name || 'Creator'}</span>
-              </div>
-              <button className="ml-2 sm:ml-4 bg-white text-black px-4 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold text-sm hover:bg-zinc-200 transition flex items-center gap-2">
-                <Bell className="h-4 w-4" />
-                Subscribe
-              </button>
+              {!isOwnVideo && creatorId ? (
+                <button
+                  type="button"
+                  disabled={followLoading}
+                  onClick={() => void handleFollowCreator()}
+                  className={`ml-2 sm:ml-4 shrink-0 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold text-sm transition flex items-center gap-2 disabled:opacity-60 ${
+                    subscribedToCreator
+                      ? 'bg-white/10 text-white border border-white/15 hover:bg-white/15'
+                      : 'bg-white text-black hover:bg-zinc-200'
+                  }`}
+                >
+                  <Bell className="h-4 w-4" />
+                  {followLoading ? '…' : subscribedToCreator ? 'Subscribed' : 'Subscribe'}
+                </button>
+              ) : null}
             </div>
 
             <div className="flex items-center gap-2 sm:gap-3">

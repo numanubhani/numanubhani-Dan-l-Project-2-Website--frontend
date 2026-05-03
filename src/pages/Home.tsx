@@ -1,28 +1,80 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { VideoCard, ReelCard } from '../components/common/VideoCard';
 import { MarketCard } from '../components/common/MarketCard';
-import { mockVideos, mockMarkets } from '../mockData';
 import { TrendingUp, ChevronRight, Play, Zap } from 'lucide-react';
-import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
+import { fetchMarkets, voteMarket } from '../services/predictionMarkets';
+import type { Market } from '../types';
+import { toast } from 'sonner';
 
 const Home = () => {
-  const shorts = mockVideos.filter(v => v.type === 'short');
-  const longVideos = mockVideos.filter(v => v.type === 'long');
+  const [feedVideos, setFeedVideos] = useState<unknown[]>([]);
+  const [feedLoading, setFeedLoading] = useState(true);
   const [liveStreams, setLiveStreams] = useState<any[]>([]);
+  const [sidebarMarkets, setSidebarMarkets] = useState<Market[]>([]);
 
   useEffect(() => {
-    const loadLiveStreams = async () => {
-      try {
-        const response = await api.get('/streams/live/');
-        setLiveStreams(response.data || []);
-      } catch (error) {
+    const loadHomeData = async () => {
+      const [streamsRes, feedRes] = await Promise.allSettled([
+        api.get('/streams/live/'),
+        api.get('/videos/feed/'),
+      ]);
+      if (streamsRes.status === 'fulfilled') {
+        setLiveStreams(streamsRes.value.data || []);
+      } else {
         setLiveStreams([]);
       }
+      if (feedRes.status === 'fulfilled') {
+        const rows = feedRes.value.data;
+        setFeedVideos(Array.isArray(rows) ? rows : []);
+      } else {
+        setFeedVideos([]);
+      }
+      setFeedLoading(false);
     };
-    loadLiveStreams();
+    loadHomeData();
   }, []);
+
+  const { shorts, longVideos } = useMemo(() => {
+    const rows = feedVideos as {
+      video_type?: string;
+      is_live?: boolean;
+    }[];
+    const shorts = rows.filter((v) => v.video_type === 'short' && !v.is_live);
+    const longVideos = rows.filter((v) => v.video_type === 'long' && !v.is_live);
+    return { shorts, longVideos };
+  }, [feedVideos]);
+
+  const loadSidebarMarkets = useCallback(async () => {
+    try {
+      const list = await fetchMarkets({ limit: 6 });
+      setSidebarMarkets(list);
+    } catch {
+      setSidebarMarkets([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSidebarMarkets();
+  }, [loadSidebarMarkets]);
+
+  const registerVote = async (marketId: string, side: 'yes' | 'no') => {
+    try {
+      const updated = await voteMarket(marketId, side);
+      setSidebarMarkets((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+    } catch (e: unknown) {
+      const st = (e as { response?: { status?: number } }).response?.status;
+      if (st === 400) {
+        await loadSidebarMarkets();
+        toast.message('Already voted', {
+          description: 'Each account gets one vote per market.',
+        });
+        return;
+      }
+      toast.error('Sign in to vote', { description: 'Log in to record your vote.' });
+    }
+  };
 
   return (
     <div className="space-y-12 py-6 px-4 lg:px-10 max-w-[1600px] mx-auto">
@@ -59,18 +111,22 @@ const Home = () => {
             </div>
             <h2 className="text-xl font-black tracking-tighter uppercase text-white italic">Shorts Feed</h2>
           </div>
-          <button className="flex items-center gap-2 text-[10px] font-black text-neon-cyan hover:brightness-110 transition-all uppercase tracking-[0.2em]">
+          <Link
+            to="/reel"
+            className="flex items-center gap-2 text-[10px] font-black text-neon-cyan hover:brightness-110 transition-all uppercase tracking-[0.2em]"
+          >
             VIEW ALL <ChevronRight className="h-4 w-4" />
-          </button>
+          </Link>
         </div>
         
         <div className="no-scrollbar flex gap-6 overflow-x-auto pb-6 scroll-smooth">
-          {shorts.map(video => (
-            <ReelCard key={video.id} video={video} />
-          ))}
-          {shorts.map(video => (
-            <ReelCard key={`dup-${video.id}`} video={video} />
-          ))}
+          {feedLoading ? (
+            <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-2 py-10">Loading shorts…</p>
+          ) : shorts.length === 0 ? (
+            <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-2 py-10">No shorts yet. Upload a short or check back soon.</p>
+          ) : (
+            shorts.map((video) => <ReelCard key={String((video as { id?: string }).id)} video={video as any} />)
+          )}
         </div>
       </section>
 
@@ -91,10 +147,20 @@ const Home = () => {
              </div>
           </div>
           
-          <div className="grid grid-cols-1 gap-x-8 gap-y-12 sm:grid-cols-2 xl:grid-cols-3">
-            {[...longVideos, ...longVideos, ...longVideos].map((video, i) => (
-              <VideoCard key={`${video.id}-${i}`} video={video} />
-            ))}
+          <div className="grid grid-cols-1 gap-x-4 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+            {feedLoading ? (
+              <p className="col-span-full text-xs font-bold text-zinc-500 uppercase tracking-widest px-2 py-10">
+                Loading videos…
+              </p>
+            ) : longVideos.length === 0 ? (
+              <p className="col-span-full text-xs font-bold text-zinc-500 uppercase tracking-widest px-2 py-10">
+                No long-form uploads in the feed yet.
+              </p>
+            ) : (
+              longVideos.map((video) => (
+                <VideoCard key={String((video as { id?: string }).id)} video={video as any} />
+              ))
+            )}
           </div>
         </div>
 
@@ -103,11 +169,35 @@ const Home = () => {
           <div className="space-y-6">
             <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-600 px-2">LIVE MARKETS // ACTIVE</h2>
             
-            <div className="space-y-6">
-              {mockMarkets.map(market => (
-                <MarketCard key={market.id} market={market} />
-              ))}
-            </div>
+            {sidebarMarkets.length > 0 ? (
+              <div className="space-y-6">
+                {sidebarMarkets.map((market) => (
+                  <MarketCard
+                    key={market.id}
+                    market={market}
+                    onVote={(side) => registerVote(market.id, side)}
+                  />
+                ))}
+                <Link
+                  to="/polymarket"
+                  className="inline-flex w-full items-center justify-center gap-1 rounded-xl border border-white/10 py-2.5 text-[10px] font-black uppercase tracking-widest text-cyan-vpulse transition-colors hover:bg-white/5"
+                >
+                  All markets
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-8 text-center">
+                <p className="text-xs font-bold text-zinc-500">No live markets in this feed.</p>
+                <Link
+                  to="/polymarket"
+                  className="mt-3 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-cyan-vpulse hover:underline"
+                >
+                  Open markets
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            )}
           </div>
 
           <div className="p-8 rounded-3xl bg-indigo-600/10 border border-indigo-500/20 shadow-2xl relative overflow-hidden group">

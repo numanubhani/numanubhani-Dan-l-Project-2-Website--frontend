@@ -353,6 +353,133 @@
   .neon-border {
     @apply border border-white/10 hover:border-neon-cyan/50 transition-colors shadow-[0_0_0px_rgba(255,0,183,0)] hover:shadow-[0_0_15px_rgba(255,0,183,0.15)];
   }
+
+  /**
+   * Studio (/studio) — light layout uses zinc-50 / white cards.
+   * When app theme is dark (html[data-theme="dark"]), align surfaces and text.
+   * Light theme unchanged: rules only apply under [data-theme="dark"].
+   */
+  [data-theme="dark"] .studio-page {
+    background-color: #000000 !important;
+    color: #fafafa;
+  }
+
+  [data-theme="dark"] .studio-page .bg-zinc-50 {
+    background-color: #0a0a0a !important;
+  }
+
+  [data-theme="dark"] .studio-page .bg-white {
+    background-color: #18181b !important;
+  }
+
+  [data-theme="dark"] .studio-page .bg-zinc-100 {
+    background-color: #27272a !important;
+  }
+
+  [data-theme="dark"] .studio-page .border-zinc-100,
+  [data-theme="dark"] .studio-page .border-zinc-200 {
+    border-color: #3f3f46 !important;
+  }
+
+  [data-theme="dark"] .studio-page .text-zinc-900 {
+    color: #fafafa !important;
+  }
+
+  [data-theme="dark"] .studio-page .text-zinc-700 {
+    color: #d4d4d8 !important;
+  }
+
+  [data-theme="dark"] .studio-page .text-zinc-600 {
+    color: #a1a1aa !important;
+  }
+
+  [data-theme="dark"] .studio-page .text-zinc-500 {
+    color: #a1a1aa !important;
+  }
+
+  [data-theme="dark"] .studio-page .text-zinc-400 {
+    color: #71717a !important;
+  }
+
+  [data-theme="dark"] .studio-page input,
+  [data-theme="dark"] .studio-page textarea,
+  [data-theme="dark"] .studio-page select {
+    background-color: #27272a !important;
+    border-color: #52525b !important;
+    color: #fafafa !important;
+  }
+
+  [data-theme="dark"] .studio-page ::placeholder {
+    color: #71717a !important;
+  }
+
+  [data-theme="dark"] .studio-page .hover\:bg-zinc-50:hover {
+    background-color: #27272a !important;
+  }
+
+  [data-theme="dark"] .studio-page .shadow-sm {
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.45);
+  }
+
+  [data-theme="dark"] .studio-page .rounded-full.bg-zinc-100 {
+    background-color: #3f3f46 !important;
+  }
+
+  [data-theme="dark"] .studio-page .bg-zinc-100.text-zinc-700 {
+    background-color: #3f3f46 !important;
+    color: #e4e4e7 !important;
+  }
+
+  [data-theme="dark"] .studio-page .bg-zinc-200:not(.rounded-full) {
+    background-color: #3f3f46 !important;
+  }
+
+  [data-theme="dark"] .studio-page .bg-zinc-300 {
+    background-color: #52525b !important;
+  }
+
+  [data-theme="dark"] .studio-page .bg-zinc-400 {
+    background-color: #71717a !important;
+  }
+
+  [data-theme="dark"] .studio-page .h-1\.5.bg-zinc-100 {
+    background-color: #3f3f46 !important;
+  }
+
+  [data-theme="dark"] .studio-page .animate-pulse.bg-zinc-900 {
+    background-color: #e4e4e7 !important;
+  }
+
+  [data-theme="dark"] .studio-page .border-t.border-zinc-200 {
+    border-color: #3f3f46 !important;
+  }
+
+  [data-theme="dark"] .studio-page .border-dashed.border-zinc-200 {
+    border-color: #52525b !important;
+  }
+
+  [data-theme="dark"] .studio-page .border-dashed.border-zinc-400 {
+    border-color: #71717a !important;
+  }
+
+  [data-theme="dark"] .studio-page .relative.h-5.w-10.bg-zinc-200 {
+    background-color: #52525b !important;
+  }
+
+  [data-theme="dark"] .studio-page .rounded-lg.bg-zinc-200.px-3 {
+    background-color: #3f3f46 !important;
+    color: #e4e4e7 !important;
+  }
+
+  [data-theme="dark"] .studio-page .rounded-2xl.bg-zinc-900.p-6.text-white {
+    background-color: #0c0c0e !important;
+    border: 1px solid #27272a;
+    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.6);
+  }
+
+  [data-theme="dark"] .studio-page .flex-1.border-neon-cyan\/30 {
+    border-color: rgba(255, 0, 183, 0.35) !important;
+  }
 }
 
 /* Animations */

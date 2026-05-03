@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Home,
   Compass,
@@ -7,21 +7,18 @@ import {
   Radio,
   ShoppingBag,
   TrendingUp,
-  PlusSquare,
   User,
-  Bell,
-  MoreVertical,
   LayoutDashboard,
-  ShieldCheck,
   Search,
   Zap,
   Sun,
   Moon,
-  CreditCard,
-  Lock
+  Flame,
+  Plus,
+  Wallet,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Toaster } from 'sonner';
+import { toast } from 'sonner';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -41,6 +38,7 @@ export const Sidebar = ({
   const navItems = [
     { label: 'Home', icon: Home, path: '/' },
     { label: 'Explore', icon: Compass, path: '/explore' },
+    { label: 'Events', icon: Flame, path: '/events' },
     { label: 'Following', icon: Users, path: '/following' },
     { label: 'Live', icon: Radio, path: '/live' },
     { label: 'Shop', icon: ShoppingBag, path: '/shop' },
@@ -115,6 +113,8 @@ export const Sidebar = ({
 
 import { useAuth } from '../../contexts/AuthContext';
 import { LogOut } from 'lucide-react';
+import { NotificationsPopover } from '../../../components/notifications/NotificationsPopover';
+import { CoinPurchaseModal } from '../../../components/wallet/CoinPurchaseModal';
 
 export const TopBar = ({
   collapsed,
@@ -128,13 +128,54 @@ export const TopBar = ({
   onToggleTheme: () => void;
 }) => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchDraft, setSearchDraft] = useState('');
+
+  useEffect(() => {
+    if (location.pathname !== '/search') return;
+    const q = new URLSearchParams(location.search).get('q') || '';
+    setSearchDraft(q);
+  }, [location.pathname, location.search]);
+
+  const balanceLabel =
+    user != null
+      ? Number(
+          typeof user.balance === 'number' ? user.balance : parseFloat(String(user.balance ?? 0)) || 0,
+        ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : '—';
+
+  const submitSearch = () => {
+    const q = searchDraft.trim();
+    if (q.length < 2) {
+      toast.message('Enter at least 2 characters to search.');
+      return;
+    }
+    navigate(`/search?q=${encodeURIComponent(q)}`);
+  };
+
   return (
     <header className="app-topbar sticky top-0 z-40 flex h-20 items-center justify-between border-b border-white/5 bg-void/80 px-4 backdrop-blur-xl lg:px-10">
-      <div className="flex flex-1 items-center gap-4 lg:hidden">
-        <Link to="/" className="flex items-center gap-2">
+      <div className="flex min-w-0 flex-1 items-center gap-3 lg:hidden">
+        <Link to="/" className="flex shrink-0 items-center gap-2">
           <div className="h-10 w-10 rounded-xl bg-neon-cyan flex items-center justify-center font-black text-black italic shadow-[0_0_15px_rgba(0,243,255,0.3)]">V</div>
         </Link>
-        <div className="h-10 w-[2px] bg-white/5" />
+        <div className="relative group min-w-0 flex-1">
+          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500 transition-colors group-focus-within:text-neon-cyan" />
+          <input
+            type="text"
+            value={searchDraft}
+            onChange={(e) => setSearchDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') submitSearch();
+            }}
+            placeholder="SEARCH…"
+            className={cn(
+              'w-full rounded-xl border border-white/5 bg-white/5 py-2.5 pl-9 pr-3 text-[9px] font-black uppercase tracking-wider text-white outline-none transition-all placeholder:text-zinc-600 focus:border-neon-cyan/30'
+            )}
+            aria-label="Search"
+          />
+        </div>
       </div>
 
       <div className="hidden max-w-xl flex-1 lg:block">
@@ -142,10 +183,16 @@ export const TopBar = ({
           <Search className="absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500 transition-colors group-focus-within:text-neon-cyan" />
           <input
             type="text"
+            value={searchDraft}
+            onChange={(e) => setSearchDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') submitSearch();
+            }}
             placeholder="SEARCH CREATORS, STREAMS OR MARKETS..."
             className={cn(
               "top-search-input rounded-2xl bg-white/5 px-6 py-3.5 pl-12 text-[10px] font-black tracking-widest outline-none border border-white/5 focus:border-neon-cyan/30 focus:ring-0 transition-all text-white placeholder:text-zinc-600 uppercase w-full max-w-[450px]"
             )}
+            aria-label="Search"
           />
         </div>
       </div>
@@ -167,14 +214,22 @@ export const TopBar = ({
           Live
         </Link>
 
-        <div
+        <button
+          type="button"
           onClick={onAddCoins}
-          className="top-wallet hidden md:flex items-center gap-3 bg-white/5 px-4 py-2.5 rounded-2xl border border-white/5 group cursor-pointer hover:border-white/20 transition-all"
+          className="top-wallet hidden cursor-pointer flex-row items-center gap-3 rounded-2xl border border-white/5 bg-white/5 px-4 py-2.5 transition-all hover:border-white/20 md:inline-flex group"
+          title="Purchase coins"
         >
-          <div className="top-wallet-coin w-4 h-4 bg-amber-coin rounded-full flex items-center justify-center text-[10px] text-black font-black">$</div>
-          <span className="top-wallet-amount text-xs font-black text-white tracking-widest">12,450.00</span>
-          <button className="top-wallet-plus ml-2 text-neon-cyan font-black text-xl hover:scale-110 active:scale-90 transition-transform">+</button>
-        </div>
+          <div className="top-wallet-coin flex h-4 w-4 items-center justify-center rounded-full bg-amber-coin text-[10px] font-black text-black">
+            $
+          </div>
+          <span className="top-wallet-amount max-w-[7rem] truncate text-xs font-black tracking-widest text-white">
+            {balanceLabel}
+          </span>
+          <span className="top-wallet-plus ml-1 text-xl font-black text-neon-cyan transition-transform hover:scale-110 active:scale-90 select-none pointer-events-none">
+            +
+          </span>
+        </button>
 
         <div className="flex items-center gap-4">
           <Link to="/stream/start" className="hidden md:flex items-center gap-2 px-6 py-2.5 rounded-2xl bg-neon-cyan text-black text-[10px] font-black uppercase tracking-widest shadow-[0_0_20px_rgba(0,243,255,0.2)] hover:brightness-110 transition-all">
@@ -184,10 +239,7 @@ export const TopBar = ({
 
           <div className="h-10 w-[1px] bg-white/5 hidden sm:block" />
 
-          <button className="relative w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center hover:bg-white/10 border border-white/5 transition-all group">
-            <Bell className="h-5 w-5 text-zinc-500 group-hover:text-neon-cyan transition-colors" />
-            <span className="absolute top-3 right-3 w-2 h-2 bg-neon-pink rounded-full shadow-[0_0_10px_rgba(255,0,85,0.5)]"></span>
-          </button>
+          <NotificationsPopover className="group" />
 
           {user ? (
             <div className="flex items-center gap-4">
@@ -219,38 +271,45 @@ export const TopBar = ({
   );
 };
 
-export const MobileNav = () => {
+import { CreateMenu } from './CreateMenu';
+
+export const MobileNav = ({ onOpenCreate }: { onOpenCreate: () => void }) => {
   const location = useLocation();
   const navItems = [
     { icon: Home, path: '/', label: 'Home' },
     { icon: Compass, path: '/explore', label: 'Explore' },
-    { icon: Radio, path: '/live', label: 'Live' },
-    { icon: TrendingUp, path: '/polymarket', label: 'Markets' },
+    { icon: Plus, onClick: onOpenCreate, label: 'Create', isAction: true },
+    { icon: Wallet, path: '/profile/wallet', label: 'Wallet' },
     { icon: User, path: '/profile', label: 'Profile' },
   ];
 
   return (
     <nav className="app-mobile-nav fixed bottom-0 left-0 z-50 flex h-20 w-full items-center justify-around border-t border-white/5 bg-void/90 px-4 backdrop-blur-2xl lg:hidden">
       {navItems.map((item) => {
-        const isActive = location.pathname === item.path;
-        return (
-          <Link
-            key={item.path}
-            to={item.path}
-            className={cn(
-              "flex flex-col items-center justify-center gap-1.5 transition-all active:scale-90",
-              isActive ? "text-neon-cyan" : "text-zinc-600"
-            )}
-          >
-            <div className={cn(
-              "p-2 rounded-xl transition-all",
-              isActive && "bg-neon-cyan/10 shadow-[0_0_15px_rgba(0,243,255,0.2)] border border-neon-cyan/20"
-            )}>
-              <item.icon className="h-5 w-5" />
-            </div>
-            <span className="text-[8px] font-black uppercase tracking-widest">{item.label}</span>
-          </Link>
-        );
+          const isActive = location.pathname === item.path;
+          const isClickAction = !!item.onClick;
+          const Component = isClickAction ? 'button' : Link;
+          
+          return (
+            <Component
+              key={item.label}
+              {...(isClickAction ? { onClick: item.onClick } : { to: item.path })}
+              className={cn(
+                "flex flex-col items-center justify-center gap-1.5 transition-all active:scale-90 outline-none",
+                !isClickAction && isActive ? "text-neon-cyan" : "text-zinc-600",
+                item.isAction && "text-white"
+              )}
+            >
+              <div className={cn(
+                "p-2 rounded-xl transition-all",
+                !isClickAction && isActive && "bg-neon-cyan/10 shadow-[0_0_15px_rgba(0,243,255,0.2)] border border-neon-cyan/20",
+                item.isAction && "bg-neon-cyan text-black shadow-[0_0_20px_rgba(0,243,255,0.4)] border-none hover:scale-110"
+              )}>
+                <item.icon className={cn("h-5 w-5", item.isAction && "h-6 w-6")} />
+              </div>
+              <span className="text-[8px] font-black uppercase tracking-widest">{item.label}</span>
+            </Component>
+          );
       })}
     </nav>
   );
@@ -258,7 +317,8 @@ export const MobileNav = () => {
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [showAddCard, setShowAddCard] = useState(false);
+  const [coinPurchaseOpen, setCoinPurchaseOpen] = useState(false);
+  const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     const stored = localStorage.getItem('vpulse-theme');
     return stored === 'light' ? 'light' : 'dark';
@@ -271,95 +331,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <div className="flex min-h-screen bg-void text-zinc-300 font-sans selection:bg-neon-cyan/30 selection:text-white overflow-x-hidden">
-      <Toaster
-        richColors
-        position="top-right"
-        theme={theme}
-        toastOptions={{
-          className: 'bg-void border border-white/5 rounded-2xl shadow-2xl font-black uppercase tracking-widest text-[10px]',
-        }}
-      />
+      {/* Toasts: single host in App.tsx (CustomAppToaster) */}
 
-      {/* Add Card Modal */}
-      <AnimatePresence>
-        {showAddCard && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="w-full max-w-md bg-void border border-white/10 rounded-[2.5rem] p-6 sm:p-10 space-y-8 shadow-2xl relative overflow-hidden"
-            >
-              <div className="flex justify-between items-start">
-                <div className="space-y-1">
-                  <h2 className="text-2xl font-black text-white italic uppercase tracking-tighter">Injective Assets</h2>
-                  <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">Add payment method to start staking</p>
-                </div>
-                <button onClick={() => setShowAddCard(false)} className="p-2 rounded-xl hover:bg-white/5 text-zinc-500">
-                  <MoreVertical className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="space-y-6">
-                <div className="space-y-4">
-                  {/* Cardholder Name */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Name on Card</label>
-                    <input type="text" placeholder="John Doe" className="w-full h-12 bg-black/40 border border-white/10 rounded-xl px-4 text-white text-sm outline-none focus:border-neon-cyan transition-colors placeholder:text-zinc-600" />
-                  </div>
-
-                  {/* Card Number */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Card Number</label>
-                    <div className="relative">
-                      <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-                      <input type="text" placeholder="0000 0000 0000 0000" className="w-full h-12 bg-black/40 border border-white/10 rounded-xl pl-11 pr-4 text-white font-mono text-sm outline-none focus:border-neon-cyan transition-colors placeholder:text-zinc-600 tracking-wider" />
-                      <div className="absolute right-4 top-1/2 -translate-y-1/2 flex">
-                        <div className="w-6 h-4 bg-red-500/80 rounded-full opacity-80" />
-                        <div className="w-6 h-4 bg-amber-500/80 rounded-full opacity-80 -ml-3 mix-blend-screen" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Expiry & CVC */}
-                  <div className="flex gap-4">
-                    <div className="space-y-2 flex-1">
-                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Expiry Date</label>
-                      <input type="text" placeholder="MM/YY" className="w-full h-12 bg-black/40 border border-white/10 rounded-xl px-4 text-white font-mono text-sm outline-none focus:border-neon-cyan transition-colors placeholder:text-zinc-600 tracking-wider" />
-                    </div>
-                    <div className="space-y-2 flex-1">
-                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">CVC</label>
-                      <div className="relative">
-                        <input type="password" placeholder="123" maxLength={4} className="w-full h-12 bg-black/40 border border-white/10 rounded-xl px-4 text-white font-mono text-sm outline-none focus:border-neon-cyan transition-colors placeholder:text-zinc-600 tracking-widest" />
-                        <Lock className="absolute right-4 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 text-zinc-500 bg-white/5 p-3 rounded-xl border border-white/5">
-                  <ShieldCheck className="h-4 w-4 text-neon-cyan" />
-                  <span className="text-[9px] uppercase tracking-widest font-bold">Payments are secure and encrypted</span>
-                </div>
-
-                <div className="flex gap-3 pt-2">
-                  <button
-                    onClick={() => setShowAddCard(false)}
-                    className="flex-1 py-3.5 bg-white/5 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all border border-white/10"
-                  >
-                    Cancel
-                  </button>
-                  <button className="flex-1 py-3.5 bg-neon-cyan text-black rounded-xl text-[10px] font-black uppercase tracking-[0.1em] shadow-[0_0_20px_rgba(0,243,255,0.2)] hover:scale-[1.02] active:scale-95 transition-all">
-                    Proceed Payment
-                  </button>
-                </div>
-              </div>
-
-              <div className="absolute top-0 right-0 w-32 h-32 bg-neon-cyan/5 blur-3xl pointer-events-none" />
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <CoinPurchaseModal open={coinPurchaseOpen} onOpenChange={setCoinPurchaseOpen} />
 
       <Sidebar
         collapsed={isSidebarCollapsed}
@@ -371,7 +345,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       )}>
         <TopBar
           collapsed={isSidebarCollapsed}
-          onAddCoins={() => setShowAddCard(true)}
+          onAddCoins={() => setCoinPurchaseOpen(true)}
           theme={theme}
           onToggleTheme={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
         />
@@ -390,7 +364,8 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           </AnimatePresence>
         </main>
       </div>
-      <MobileNav />
+      <MobileNav onOpenCreate={() => setIsCreateMenuOpen(true)} />
+      <CreateMenu isOpen={isCreateMenuOpen} onClose={() => setIsCreateMenuOpen(false)} />
     </div>
   );
 };

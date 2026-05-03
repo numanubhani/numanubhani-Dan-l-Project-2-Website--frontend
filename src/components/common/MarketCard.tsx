@@ -1,13 +1,26 @@
 import React from 'react';
-import { TrendingUp, Users, Clock } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 import { Market } from '../../types';
 import { motion } from 'motion/react';
+import { marketYieldFromVotes } from '@/lib/marketVotes';
+import { cn } from '@/lib/utils';
 
 interface MarketCardProps {
   market: Market;
+  /** When set, Vote YES / Vote NO update tallies (typically from parent state). */
+  onVote?: (side: 'yes' | 'no') => void;
 }
 
-export const MarketCard: React.FC<MarketCardProps> = ({ market }) => {
+const DEFAULT_YES = 'Vote YES';
+const DEFAULT_NO = 'Vote NO';
+
+export const MarketCard: React.FC<MarketCardProps> = ({ market, onVote }) => {
+  const { yesPct, noPct, totalVotes, awaitingVotes } = marketYieldFromVotes(market);
+  const yesCta = market.buttonLabelYes?.trim() || DEFAULT_YES;
+  const noCta = market.buttonLabelNo?.trim() || DEFAULT_NO;
+  const hasVoted = market.userVote === 'yes' || market.userVote === 'no';
+  const canVote = Boolean(onVote) && !hasVoted;
+
   return (
     <motion.div 
       whileHover={{ zIndex: 10 }}
@@ -26,17 +39,30 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market }) => {
       </div>
 
       <div className="space-y-6">
-        {/* Probability Bars */}
+        <p className="text-[10px] font-black uppercase tracking-widest text-zinc-600">
+          {awaitingVotes ? (
+            <>Awaiting votes · both yields start at 0% until the first vote</>
+          ) : (
+            <>
+              {totalVotes} vote{totalVotes === 1 ? '' : 's'} · yields follow vote share
+            </>
+          )}
+        </p>
+
+        {/* Vote-share bars */}
         <div className="space-y-5">
           <div className="relative">
             <div className="flex justify-between text-[10px] font-black uppercase tracking-widest mb-2 px-1">
               <span className="text-emerald-400">Yield YES</span>
-              <span className="text-zinc-500 font-mono italic">{market.probability}% ALPHA</span>
+              <span className="text-zinc-500 font-mono italic">
+                <span className="text-emerald-400/90">{yesPct}%</span> YES · ALPHA
+              </span>
             </div>
             <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-              <motion.div 
+              <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: `${market.probability}%` }}
+                animate={{ width: `${yesPct}%` }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                 className="h-full bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]"
               />
             </div>
@@ -45,24 +71,56 @@ export const MarketCard: React.FC<MarketCardProps> = ({ market }) => {
           <div className="relative">
             <div className="flex justify-between text-[10px] font-black uppercase tracking-widest mb-2 px-1">
               <span className="text-neon-pink">Yield NO</span>
-              <span className="text-zinc-500 font-mono italic">{100 - market.probability}% ALPHA</span>
+              <span className="text-zinc-500 font-mono italic">
+                <span className="text-neon-pink/90">{noPct}%</span> NO · ALPHA
+              </span>
             </div>
             <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-              <motion.div 
+              <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: `${100 - market.probability}%` }}
+                animate={{ width: `${noPct}%` }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                 className="h-full bg-neon-pink rounded-full shadow-[0_0_10px_rgba(255,0,85,0.5)]"
               />
             </div>
           </div>
         </div>
 
+        {hasVoted && (
+          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+            Your vote is final · you chose{' '}
+            <span className={market.userVote === 'yes' ? 'text-emerald-400' : 'text-neon-pink'}>
+              {market.userVote === 'yes' ? yesCta : noCta}
+            </span>
+          </p>
+        )}
+
         <div className="grid grid-cols-2 gap-4 mt-8 pt-4 border-t border-white/5">
-          <button className="py-3.5 rounded-2xl bg-emerald-600/10 border border-emerald-600/30 text-emerald-400 text-[10px] font-black hover:bg-emerald-600 hover:text-black transition-all uppercase tracking-[0.2em] shadow-lg shadow-emerald-500/5 active:scale-95">
-            Stake YES
+          <button
+            type="button"
+            disabled={!canVote}
+            onClick={() => canVote && onVote?.('yes')}
+            title={hasVoted ? 'You already voted on this market' : yesCta}
+            className={cn(
+              'min-h-[3rem] rounded-2xl border bg-emerald-600/10 border-emerald-600/30 px-2 py-3 text-center text-emerald-400 text-[9px] font-black uppercase leading-tight tracking-[0.12em] shadow-lg shadow-emerald-500/5 transition-all sm:text-[10px] sm:tracking-[0.18em]',
+              canVote && 'hover:bg-emerald-600 hover:text-black active:scale-95',
+              !canVote && 'cursor-not-allowed opacity-45',
+            )}
+          >
+            {yesCta}
           </button>
-          <button className="py-3.5 rounded-2xl bg-neon-pink/10 border border-neon-pink/30 text-neon-pink text-[10px] font-black hover:bg-neon-pink hover:text-black transition-all uppercase tracking-[0.2em] shadow-lg shadow-neon-pink/5 active:scale-95">
-            Stake NO
+          <button
+            type="button"
+            disabled={!canVote}
+            onClick={() => canVote && onVote?.('no')}
+            title={hasVoted ? 'You already voted on this market' : noCta}
+            className={cn(
+              'min-h-[3rem] rounded-2xl border bg-neon-pink/10 border-neon-pink/30 px-2 py-3 text-center text-neon-pink text-[9px] font-black uppercase leading-tight tracking-[0.12em] shadow-lg shadow-neon-pink/5 transition-all sm:text-[10px] sm:tracking-[0.18em]',
+              canVote && 'hover:bg-neon-pink hover:text-black active:scale-95',
+              !canVote && 'cursor-not-allowed opacity-45',
+            )}
+          >
+            {noCta}
           </button>
         </div>
       </div>

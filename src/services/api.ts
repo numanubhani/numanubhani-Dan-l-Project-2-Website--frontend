@@ -13,6 +13,9 @@ export const api = axios.create({
 // Add request interceptor to attach DRF Token auth header
 api.interceptors.request.use(
   (config) => {
+    if (config.data instanceof FormData) {
+      delete (config.headers as Record<string, unknown>)['Content-Type'];
+    }
     const skipAuth = (config as { skipAuth?: boolean }).skipAuth === true;
     const path = `${config.baseURL || ''}${config.url || ''}`.replace(/\/+/g, '/');
     const isPublicAuth = /\/auth\/(register|login)\/?(\?|$)/.test(path);
@@ -46,3 +49,23 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// ─── Event Feed API helpers ──────────────────────────────────────────────────
+import type { FeedEvent, ChallengeEvent } from '../types';
+
+export const eventApi = {
+  /** Unified feed of challenges + predictions. Pass type = 'challenge'|'prediction'|'' for All */
+  getFeed: (type: 'challenge' | 'prediction' | '' = '') =>
+    api.get<FeedEvent[]>('/events/feed/', { params: type ? { type } : undefined }),
+
+  /** Sponsor a challenge event */
+  sponsorChallenge: (eventId: string, amount: number, side: 'yes' | 'no' | 'sponsor') =>
+    api.post<{ message: string; new_balance: string; event: ChallengeEvent }>(
+      `/events/challenges/${eventId}/sponsor/`,
+      { amount, side }
+    ),
+
+  /** Vote on a prediction market (existing endpoint, added for event feed use) */
+  votePrediction: (marketId: string, side: 'yes' | 'no', amount?: number) =>
+    api.post(`/markets/${marketId}/vote/`, { side, amount }),
+};

@@ -1,10 +1,9 @@
 import axios from 'axios';
 
-const LOCAL_BACKEND = 'http://localhost:8000';
-const DEPLOYED_BACKEND = 'https://muhammadnumansubhan1.pythonanywhere.com';
+const DEPLOYED_BACKEND = 'http://177.7.46.7';
 
 // In DEV, we use the Vite proxy (empty string). In PROD, we use the deployed URL.
-const BASE_URL = import.meta.env.DEV ? '' : DEPLOYED_BACKEND;
+const BASE_URL = (import.meta as unknown as { env: { DEV: boolean } }).env.DEV ? '' : DEPLOYED_BACKEND;
 
 /**
  * Utility to fix absolute URLs returned by the backend that might 
@@ -13,7 +12,7 @@ const BASE_URL = import.meta.env.DEV ? '' : DEPLOYED_BACKEND;
 export const fixUrl = (url: string | null | undefined): string => {
   if (!url) return '';
   if (url.startsWith('blob:')) return url;
-  if (import.meta.env.DEV) return url;
+  if ((import.meta as unknown as { env: { DEV: boolean } }).env.DEV) return url;
   // Replace localhost:8000 with the actual deployed domain if found
   if (url.includes('localhost:8000') || url.includes('127.0.0.1:8000')) {
     return url.replace(/^http:\/\/(localhost|127\.0\.0\.1):8000/, DEPLOYED_BACKEND);

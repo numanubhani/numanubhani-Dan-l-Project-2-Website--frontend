@@ -21,9 +21,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { api } from '../services/api';
 import { BetMarkerTimeline } from '../components/common/BetMarkerTimeline';
-import { useAuth } from '../contexts/AuthContext';
 import LivePlayerChat from '../components/live/LivePlayerChat';
 import { cn } from '@/lib/utils';
+import { eventApi } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 const CATEGORY_PRESETS = [
   'Education',
@@ -68,6 +69,13 @@ const Studio = () => {
   const [tagInput, setTagInput] = useState('');
   const [commentsEnabled, setCommentsEnabled] = useState(true);
   const [commentsSectionOpen, setCommentsSectionOpen] = useState(true);
+
+  // Event Reel States
+  const [isEventReel, setIsEventReel] = useState(false);
+  const [eventReelType, setEventReelType] = useState<'challenge' | 'prediction'>('challenge');
+  const [eventEndDate, setEventEndDate] = useState('');
+  const [btnYes, setBtnYes] = useState('Vote YES');
+  const [btnNo, setBtnNo] = useState('Vote NO');
 
   const wordCount = description.trim().split(/\s+/).filter(w => w.length > 0).length;
   const maxWords = studioTab === 'long' ? 200 : studioTab === 'short' ? 20 : 200;
@@ -290,24 +298,41 @@ const Studio = () => {
       formData.append('duration_seconds', String(Math.round(videoDurationSeconds || 0)));
       formData.append('thumbnail', thumbnailFile);
 
-      if (betTriggers.length > 0) {
-        formData.append('bet_markers', JSON.stringify(betTriggers.map(b => ({
-          timestamp: b.timestamp,
-          question: b.question,
-          options: b.options.map((opt, i) => ({ text: opt, odds: 2.0 }))
-        }))));
-      }
-
-      await api.post('/videos/upload/', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
+      if (isEventReel && studioTab === 'short') {
+        const eventData = new FormData();
+        eventData.append('title', title);
+        eventData.append('category', category);
+        eventData.append('description', description);
+        if (eventEndDate) eventData.append('end_date', eventEndDate);
+        eventData.append('video_file', file);
+        if (thumbnailFile) {
+           eventData.append('image', thumbnailFile); // We use thumbnail as image fallback
         }
-      });
-      
-      toast.success("VIDEO UPLOADED", { 
-        description: "Your video has been successfully uploaded to the platform." 
-      });
-      navigate('/profile');
+        
+        if (eventReelType === 'challenge') {
+           await eventApi.createChallenge(eventData);
+        } else {
+           eventData.append('button_label_yes', btnYes);
+           eventData.append('button_label_no', btnNo);
+           await eventApi.createPrediction(eventData);
+        }
+        
+        toast.success("EVENT REEL PUBLISHED", { 
+          description: "Your event reel is now live!" 
+        });
+        navigate('/events');
+      } else {
+        await api.post('/videos/upload/', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          }
+        });
+        
+        toast.success("VIDEO UPLOADED", { 
+          description: "Your video has been successfully uploaded to the platform." 
+        });
+        navigate('/profile');
+      }
     } catch (error: unknown) {
       console.error('Upload failed:', error);
       const ax = error as { response?: { data?: Record<string, unknown> } };
@@ -512,10 +537,10 @@ const Studio = () => {
                       'rounded-lg border px-3 py-1 text-[10px] font-black uppercase tracking-widest shadow-lg',
                       studioTab === 'long'
                         ? 'border-cyan-500/50 bg-cyan-400 text-black'
-                        : 'border-pink-500/50 bg-[#FF2D55] text-white',
+                        : isEventReel ? 'border-orange-500/50 bg-orange-500 text-white' : 'border-pink-500/50 bg-[#FF2D55] text-white',
                     )}
                   >
-                    {studioTab === 'long' ? 'Long video' : 'Reel'}
+                    {studioTab === 'long' ? 'Long video' : isEventReel ? 'Event Reel' : 'Reel'}
                   </span>
                 </div>
                 {videoDurationSeconds != null && videoDurationSeconds > 0 ? (
@@ -941,6 +966,62 @@ const Studio = () => {
               Upload custom thumbnail
             </button>
           </section>
+
+          {studioTab === 'short' && (
+            <section className="rounded-2xl border border-orange-500/30 bg-orange-500/5 p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                   <div className="h-10 w-10 rounded-xl bg-orange-500/20 flex items-center justify-center text-lg shadow-inner">⚡</div>
+                   <div>
+                     <h3 className="text-sm font-bold text-zinc-900 leading-tight">Make it an Event Reel</h3>
+                     <p className="text-[9px] uppercase font-black tracking-widest text-zinc-500 mt-0.5">Attach Challenge / Prediction</p>
+                   </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsEventReel(!isEventReel)}
+                  className={cn(
+                    'relative h-6 w-12 shrink-0 rounded-full transition-colors border',
+                    isEventReel ? 'bg-orange-500 border-orange-600' : 'bg-zinc-200 border-zinc-300',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'absolute top-[3px] h-4 w-4 rounded-full bg-white shadow transition-all',
+                      isEventReel ? 'right-1' : 'left-1',
+                    )}
+                  />
+                </button>
+              </div>
+
+              {isEventReel && (
+                <div className="space-y-4 pt-5 border-t border-orange-500/20">
+                  <div className="flex gap-2">
+                     <button type="button" onClick={() => setEventReelType('challenge')} className={cn("flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition", eventReelType === 'challenge' ? "bg-blue-600 text-white shadow-md" : "bg-white border border-zinc-200 text-zinc-500")}>Challenge</button>
+                     <button type="button" onClick={() => setEventReelType('prediction')} className={cn("flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition", eventReelType === 'prediction' ? "bg-orange-600 text-white shadow-md" : "bg-white border border-zinc-200 text-zinc-500")}>Prediction</button>
+                  </div>
+                  
+                  {eventReelType === 'prediction' && (
+                    <div className="grid grid-cols-2 gap-3">
+                       <div>
+                          <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Yes Label</label>
+                          <input value={btnYes} onChange={e=>setBtnYes(e.target.value)} className="w-full mt-1 bg-white border border-green-500/50 rounded-xl px-3 py-2.5 text-zinc-900 text-xs font-bold outline-none focus:border-green-500 transition shadow-sm" />
+                       </div>
+                       <div>
+                          <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">No Label</label>
+                          <input value={btnNo} onChange={e=>setBtnNo(e.target.value)} className="w-full mt-1 bg-white border border-red-500/50 rounded-xl px-3 py-2.5 text-zinc-900 text-xs font-bold outline-none focus:border-red-500 transition shadow-sm" />
+                       </div>
+                    </div>
+                  )}
+
+                  <div>
+                     <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">End Date (optional)</label>
+                     <input value={eventEndDate} onChange={e=>setEventEndDate(e.target.value)} placeholder="e.g. Dec 31, 2026" className="w-full mt-1 bg-white border border-zinc-200 rounded-xl px-3 py-2.5 text-zinc-900 text-xs outline-none focus:border-orange-500 transition shadow-sm" />
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
 
           <div className="rounded-2xl bg-zinc-900 p-6 text-white shadow-xl">
             <div className="mb-4 flex items-center space-x-3">

@@ -1,4 +1,10 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 import {
   Heart,
   MessageCircle,
@@ -13,12 +19,13 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { BetMarkerTimeline, maxAllowedTimeBeforeNextBet } from '../components/common/BetMarkerTimeline';
-import { api } from '../services/api';
+import { api, eventApi, fixUrl } from '../services/api';
 
 const VerticalFeed = () => {
   const [shorts, setShorts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [feedType, setFeedType] = useState<'foryou' | 'following' | 'events'>('foryou');
   const [isMuted, setIsMuted] = useState(true);
 
   const [betOverlay, setBetOverlay] = useState<{ videoId: string; markerId: string } | null>(null);
@@ -37,27 +44,46 @@ const VerticalFeed = () => {
   const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState('');
   const [viewedVideos, setViewedVideos] = useState<Set<string>>(new Set());
+  
+  // Event Modal State
+  const [eventModal, setEventModal] = useState<any | null>(null);
+  const [sponsorAmount, setSponsorAmount] = useState('');
+  const [sponsorSide, setSponsorSide] = useState<'yes' | 'no'>('yes');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchReels = async () => {
+    const fetchFeed = async () => {
+      setLoading(true);
       try {
-        const response = await api.get('/videos/feed/?type=reels');
-        if (response.data.length === 0) {
-          const fallback = await api.get('/videos/feed/');
-          setShorts(fallback.data);
-        } else {
-          setShorts(response.data);
+        let endpoint = '/videos/feed/?type=reels';
+        if (feedType === 'events') {
+          endpoint = '/events/feed/';
+        } else if (feedType === 'following') {
+          endpoint = '/videos/feed/?following=true';
         }
+
+        const response = await api.get(endpoint);
+        let data = response.data;
+
+        // If foryou is empty, fallback to general feed
+        if (feedType === 'foryou' && data.length === 0) {
+          const fallback = await api.get('/videos/feed/');
+          data = fallback.data;
+        }
+
+        setShorts(data);
+        setCurrentIndex(0); // Reset to first item on type change
       } catch (err) {
-        console.error('Failed to load reels', err);
+        console.error('Failed to load feed', err);
+        toast.error('Failed to load feed data.');
       } finally {
         setLoading(false);
       }
     };
-    fetchReels();
-  }, []);
+    fetchFeed();
+  }, [feedType]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const height = e.currentTarget.clientHeight;
@@ -253,33 +279,46 @@ const VerticalFeed = () => {
       return;
     }
     activeVideoRef.current?.pause();
+    
+    // If it's an event item, open the specialized sponsor modal
+    if (video.type === 'challenge' || video.type === 'prediction') {
+      setEventModal(video);
+      setSponsorAmount('');
+      setSponsorSide('yes');
+      return;
+    }
+
     setBetOverlay({ videoId: video.id, markerId: String(pending.id) });
   };
 
   const ActionBar = ({ video }: { video: any }) => {
     if (!video) return null;
+    const itemId = video.id || video.data?.id;
+    const hasInteracted = video.has_liked || video.user_voted || video.user_sponsored;
+    const likeCount = video.likes || (video.data?.pool_amount ? 0 : 0); // Events might not have likes in this schema yet
+
     return (
       <div className="flex flex-col items-center gap-6">
         <div className="flex flex-col items-center">
-          <button onClick={() => handleLike(video.id)} aria-label="Like reel" className="group active:scale-90 transition-transform">
+          <button onClick={() => video.type ? openBetFromActionBar(video) : handleLike(itemId)} aria-label="Like or Interact" className="group active:scale-90 transition-transform">
             <div
-              className={`w-12 h-12 rounded-xl backdrop-blur-md border flex items-center justify-center transition-all ${video.has_liked ? 'bg-neon-pink/20 border-neon-pink' : 'bg-white/5 border-white/10 hover:border-neon-pink/50'}`}
+              className={`w-12 h-12 rounded-xl backdrop-blur-md border flex items-center justify-center transition-all ${hasInteracted ? 'bg-neon-pink/20 border-neon-pink' : 'bg-white/5 border-white/10 hover:border-neon-pink/50'}`}
             >
               <Heart
-                className={`h-6 w-6 transition-all ${video.has_liked ? 'text-neon-pink fill-neon-pink' : 'text-white group-hover:text-neon-pink'}`}
+                className={`h-6 w-6 transition-all ${hasInteracted ? 'text-neon-pink fill-neon-pink' : 'text-white group-hover:text-neon-pink'}`}
               />
             </div>
           </button>
-          <span className="text-[8px] font-black text-white mt-1.5 uppercase tracking-widest">{formatCount(video.likes)}</span>
+          <span className="text-[8px] font-black text-white mt-1.5 uppercase tracking-widest">{formatCount(video.type ? (video.data.sponsor_count || 0) : video.likes)}</span>
         </div>
 
         <div className="flex flex-col items-center">
-          <button onClick={() => openComments(video.id)} aria-label="Open comments" className="group active:scale-90 transition-transform">
+          <button onClick={() => !video.type && openComments(itemId)} aria-label="Open comments" className="group active:scale-90 transition-transform">
             <div className="w-12 h-12 rounded-xl bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center hover:border-neon-purple/50 transition-all">
               <MessageCircle className="h-6 w-6 text-white group-hover:text-neon-purple transition-all" />
             </div>
           </button>
-          <span className="text-[8px] font-black text-white mt-1.5 uppercase tracking-widest">{formatCount(video.comments)}</span>
+          <span className="text-[8px] font-black text-white mt-1.5 uppercase tracking-widest">{formatCount(video.type ? 0 : video.comments)}</span>
         </div>
 
         <div className="flex flex-col items-center">
@@ -289,7 +328,7 @@ const VerticalFeed = () => {
           >
             <TrendingUp className="h-7 w-7 text-black stroke-[3]" />
           </button>
-          <span className="text-[8px] font-black text-neon-cyan mt-2 uppercase tracking-widest animate-pulse">BET</span>
+          <span className="text-[8px] font-black text-neon-cyan mt-2 uppercase tracking-widest animate-pulse">{video.type ? 'PULSE' : 'BET'}</span>
         </div>
 
         <button
@@ -330,9 +369,34 @@ const VerticalFeed = () => {
         <button onClick={() => navigate(-1)} className="pointer-events-auto p-1 text-white/90 hover:text-neon-cyan transition-colors">
           <ArrowLeft className="h-6 w-6" />
         </button>
-        <div className="flex gap-6 pointer-events-auto px-2 py-1">
-          <button className="text-zinc-300 text-[10px] font-black uppercase tracking-[0.2em] hover:text-white transition-colors">Following</button>
-          <button className="text-neon-cyan text-[10px] font-black uppercase tracking-[0.2em] drop-shadow-[0_0_10px_rgba(0,243,255,0.45)]">For You</button>
+        <div className="flex gap-6 pointer-events-auto px-2 py-1 items-baseline">
+          <button 
+            onClick={() => setFeedType('following')}
+            className={cn(
+              "text-[10px] font-black uppercase tracking-[0.2em] transition-all",
+              feedType === 'following' ? "text-neon-cyan drop-shadow-[0_0_10px_rgba(0,243,255,0.45)]" : "text-zinc-500 hover:text-white"
+            )}
+          >
+            Following
+          </button>
+          <button 
+            onClick={() => setFeedType('foryou')}
+            className={cn(
+              "text-[10px] font-black uppercase tracking-[0.2em] transition-all",
+              feedType === 'foryou' ? "text-neon-cyan drop-shadow-[0_0_10px_rgba(0,243,255,0.45)]" : "text-zinc-500 hover:text-white"
+            )}
+          >
+            For You
+          </button>
+          <button 
+            onClick={() => setFeedType('events')}
+            className={cn(
+              "text-[10px] font-black uppercase tracking-[0.2em] transition-all",
+              feedType === 'events' ? "text-neon-cyan drop-shadow-[0_0_10px_rgba(0,243,255,0.45)]" : "text-zinc-500 hover:text-white"
+            )}
+          >
+            Events
+          </button>
         </div>
         <button className="pointer-events-auto p-1 text-neon-purple hover:text-neon-pink transition-colors">
           <TrendingUp className="h-6 w-6" />
@@ -352,61 +416,110 @@ const VerticalFeed = () => {
 
               return (
                 <div key={video.id} className="relative h-full w-full snap-start flex items-center justify-center">
-                  <video
-                    src={video.video_file_url || video.video_url}
-                    className="h-full w-full object-cover"
-                    loop={markers.length === 0 || allMarkersResolved}
-                    muted={isMuted || !!overlayThis}
-                    autoPlay={isActive && !showComments && !overlayThis}
-                    playsInline
-                    ref={(el) => {
-                      if (isActive) {
-                        activeVideoRef.current = el;
-                      }
-                    }}
-                    onLoadedMetadata={(e) => {
-                      const d = e.currentTarget.duration;
-                      if (Number.isFinite(d) && d > 0) {
-                        setDurationById((prev) => ({ ...prev, [video.id]: d }));
-                      }
-                    }}
-                    onTimeUpdate={(e) => handleReelTimeUpdate(video, index, e.currentTarget)}
-                    onSeeking={(e) => clampReelSeek(video.id, e.currentTarget, markers)}
-                    onSeeked={(e) => clampReelSeek(video.id, e.currentTarget, markers)}
-                  />
+                  {video.type === 'challenge' || video.type === 'prediction' ? (
+                    <div className="absolute inset-0">
+                      {video.data.image && (
+                        <img 
+                          src={fixUrl(video.data.image)} 
+                          alt="" 
+                          className="h-full w-full object-cover"
+                        />
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/10 to-black/90" />
+                      
+                      {/* Event Badge */}
+                      <div className="absolute top-24 left-5 z-20">
+                        <span className={cn(
+                          "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest backdrop-blur-md border",
+                          video.type === 'challenge' ? "bg-neon-cyan/20 border-neon-cyan/30 text-neon-cyan" : "bg-neon-purple/20 border-neon-purple/30 text-neon-purple"
+                        )}>
+                          {video.type === 'challenge' ? '⚡ Challenge' : '🔮 Prediction'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <video
+                      src={video.video_file_url || video.video_url}
+                      className="h-full w-full object-cover"
+                      loop={markers.length === 0 || allMarkersResolved}
+                      muted={isMuted || !!overlayThis}
+                      autoPlay={isActive && !showComments && !overlayThis}
+                      playsInline
+                      ref={(el) => {
+                        if (isActive) {
+                          activeVideoRef.current = el;
+                        }
+                      }}
+                      onLoadedMetadata={(e) => {
+                        const d = e.currentTarget.duration;
+                        if (Number.isFinite(d) && d > 0) {
+                          setDurationById((prev) => ({ ...prev, [video.id]: d }));
+                        }
+                      }}
+                      onTimeUpdate={(e) => handleReelTimeUpdate(video, index, e.currentTarget)}
+                      onSeeking={(e) => clampReelSeek(video.id, e.currentTarget, markers)}
+                      onSeeked={(e) => clampReelSeek(video.id, e.currentTarget, markers)}
+                    />
+                  )}
 
                   <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/90 pointer-events-none" />
 
-                  {markers.length > 0 ? (
-                    <div className="absolute bottom-[4.25rem] left-5 right-[4.75rem] lg:right-6 z-[30] pointer-events-none">
-                      <div className="pointer-events-auto">
-                        <BetMarkerTimeline
-                          duration={reelTimelineDuration(video, markers)}
-                          currentTime={reelTimeById[video.id] ?? 0}
-                          markers={markers.map((m: any) => ({ id: String(m.id), timestamp: Number(m.timestamp) || 0 }))}
-                          activeMarkerId={overlayThis ? betOverlay?.markerId ?? null : null}
-                          completedMarkerIds={placed}
-                          label="Bets"
-                        />
+                  {video.type === 'challenge' || video.type === 'prediction' ? (
+                    <div className="absolute bottom-24 left-5 right-20 z-[30] pointer-events-none">
+                      <div className="p-4 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl space-y-3 pointer-events-auto">
+                        <div className="flex justify-between items-center">
+                          <span className="text-white/40 text-[9px] font-black uppercase tracking-[0.2em]">Live Pulse</span>
+                          <span className="text-white font-black text-xs tracking-tighter">${(video.data.pool_amount || 0).toLocaleString()}</span>
+                        </div>
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-[8px] font-black uppercase tracking-widest">
+                            <span className="text-neon-cyan">Yes {video.data.yes_pct || 50}%</span>
+                            <span className="text-neon-pink">No {video.data.no_pct || 50}%</span>
+                          </div>
+                          <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                            <motion.div 
+                              initial={{ width: 0 }}
+                              animate={{ width: `${video.data.yes_pct || 50}%` }}
+                              className="h-full bg-gradient-to-r from-neon-cyan to-neon-purple"
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  ) : null}
+                  ) : (
+                    markers.length > 0 ? (
+                      <div className="absolute bottom-[4.25rem] left-5 right-[4.75rem] lg:right-6 z-[30] pointer-events-none">
+                        <div className="pointer-events-auto">
+                          <BetMarkerTimeline
+                            duration={reelTimelineDuration(video, markers)}
+                            currentTime={reelTimeById[video.id] ?? 0}
+                            markers={markers.map((m: any) => ({ id: String(m.id), timestamp: Number(m.timestamp) || 0 }))}
+                            activeMarkerId={overlayThis ? betOverlay?.markerId ?? null : null}
+                            completedMarkerIds={placed}
+                            label="Bets"
+                          />
+                        </div>
+                      </div>
+                    ) : null
+                  )}
 
                   <div className="absolute bottom-8 left-5 right-16 lg:right-5 pointer-events-none z-20">
                     <div className="flex items-center gap-3 mb-4 pointer-events-auto">
-                      <Link to={`/profile/${video.creator}`} className="h-10 w-10 overflow-hidden rounded-xl border-2 border-white/10 shadow-xl">
-                        <img src={video.creator_avatar} alt={video.creator_name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                      <Link to={`/profile/${video.creator || video.data.creator}`} className="h-10 w-10 overflow-hidden rounded-xl border-2 border-white/10 shadow-xl">
+                        <img src={video.creator_avatar || video.data.creator_avatar} alt={video.creator_name || video.data.creator_name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                       </Link>
                       <div className="flex flex-col">
                         <span className="font-black text-white flex items-center gap-2 text-sm italic tracking-tighter uppercase whitespace-nowrap">
-                          @{video.creator_name}
+                          @{video.creator_name || video.data.creator_name}
                         </span>
                         <button className="text-[8px] bg-neon-cyan/20 border border-neon-cyan/30 px-2 py-0.5 rounded-lg font-black text-neon-cyan w-fit uppercase tracking-widest mt-1">
                           SUBSCRIBE
                         </button>
                       </div>
                     </div>
-                    <p className="text-[11px] text-zinc-300 line-clamp-3 font-bold drop-shadow-lg tracking-tight leading-relaxed uppercase">{video.description}</p>
+                    <p className="text-[11px] text-zinc-300 line-clamp-3 font-bold drop-shadow-lg tracking-tight leading-relaxed uppercase">
+                      {video.description || video.data.description || video.data.title}
+                    </p>
                   </div>
 
                   <div className="absolute bottom-8 right-3 flex lg:hidden">
@@ -556,6 +669,120 @@ const VerticalFeed = () => {
                 </button>
               </div>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {eventModal && (
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-end justify-center bg-black/60 backdrop-blur-md"
+            onClick={(e) => e.target === e.currentTarget && setEventModal(null)}
+          >
+            <motion.div 
+              initial={{ y: "100%" }} 
+              animate={{ y: 0 }} 
+              exit={{ y: "100%" }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="w-full max-w-lg rounded-t-[2.5rem] bg-zinc-950 border-t border-white/10 p-8 space-y-6 shadow-[0_-20px_50px_rgba(0,0,0,0.5)]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <span className={cn(
+                    "text-[10px] font-black uppercase tracking-[0.2em]",
+                    eventModal.type === 'challenge' ? "text-neon-cyan" : "text-neon-purple"
+                  )}>
+                    {eventModal.type === 'challenge' ? '⚡ Challenge Sponsor' : '🔮 Pulse Prediction'}
+                  </span>
+                  <h3 className="text-lg font-black text-white uppercase italic tracking-tight">{eventModal.data.title}</h3>
+                </div>
+                <button 
+                  onClick={() => setEventModal(null)} 
+                  className="p-3 bg-white/5 rounded-2xl hover:bg-white/10 transition-colors"
+                >
+                  <X className="h-5 w-5 text-zinc-400" />
+                </button>
+              </div>
+
+              <div className="p-5 rounded-3xl bg-white/5 border border-white/10 space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Global Pool</span>
+                  <span className="text-white font-black text-sm">${(eventModal.data.pool_amount || 0).toLocaleString()}</span>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[9px] font-black uppercase">
+                    <span className="text-neon-cyan">YES {eventModal.data.yes_pct || 50}%</span>
+                    <span className="text-neon-pink">NO {eventModal.data.no_pct || 50}%</span>
+                  </div>
+                  <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-neon-cyan to-neon-purple" 
+                      style={{ width: `${eventModal.data.yes_pct || 50}%` }} 
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  {(['yes', 'no'] as const).map(side => (
+                    <button
+                      key={side}
+                      onClick={() => setSponsorSide(side)}
+                      className={cn(
+                        "py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] transition-all border",
+                        sponsorSide === side 
+                          ? (side === 'yes' ? "bg-neon-cyan/20 border-neon-cyan text-neon-cyan shadow-[0_0_20px_rgba(0,243,255,0.2)]" : "bg-neon-pink/20 border-neon-pink text-neon-pink shadow-[0_0_20px_rgba(255,46,145,0.2)]")
+                          : "bg-white/5 border-white/10 text-zinc-500 hover:text-white"
+                      )}
+                    >
+                      {side === 'yes' ? '✅ Believe' : '❌ Doubt'}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="relative">
+                  <span className="absolute left-5 top-1/2 -translate-y-1/2 text-zinc-500 font-black">$</span>
+                  <input
+                    type="number"
+                    value={sponsorAmount}
+                    onChange={(e) => setSponsorAmount(e.target.value)}
+                    placeholder="Enter amount..."
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-10 pr-5 text-sm font-black text-white outline-none focus:border-neon-cyan transition-all"
+                  />
+                </div>
+
+                <button
+                  onClick={async () => {
+                    const amt = parseFloat(sponsorAmount);
+                    if (!amt || amt <= 0) return toast.error('Enter a valid amount');
+                    setIsSubmitting(true);
+                    try {
+                      if (eventModal.type === 'challenge') {
+                        await eventApi.sponsorChallenge(eventModal.data.id, amt, sponsorSide);
+                      } else {
+                        await eventApi.votePrediction(eventModal.data.id, sponsorSide, amt);
+                      }
+                      toast.success('🎉 Participation successful!');
+                      setEventModal(null);
+                    } catch (err: any) {
+                      toast.error(err?.response?.data?.detail || 'Failed to submit');
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  }}
+                  disabled={isSubmitting || !sponsorAmount}
+                  className={cn(
+                    "w-full py-5 rounded-2xl font-black text-xs uppercase tracking-[0.3em] text-black shadow-2xl transition-all active:scale-95 disabled:opacity-50",
+                    eventModal.type === 'challenge' ? "bg-neon-cyan" : "bg-neon-purple text-white"
+                  )}
+                >
+                  {isSubmitting ? 'PROCESSING...' : 'CONFIRM SPONSOR'}
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

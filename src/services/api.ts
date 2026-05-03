@@ -86,4 +86,16 @@ export const eventApi = {
   /** Vote on a prediction market (existing endpoint, added for event feed use) */
   votePrediction: (marketId: string, side: 'yes' | 'no', amount?: number) =>
     api.post(`/markets/${marketId}/vote/`, { side, amount }),
+
+  /** Create a new challenge event */
+  createChallenge: (formData: FormData) =>
+    api.post<ChallengeEvent>('/events/challenges/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
+  /** Create a new prediction market */
+  createPrediction: (formData: FormData) =>
+    api.post('/markets/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
 };

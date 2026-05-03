@@ -130,6 +130,8 @@ export interface ChallengeEvent {
   status: 'open' | 'completed' | 'cancelled';
   end_date: string;
   image: string;
+  video_url?: string;
+  video_file_url?: string;
   user_sponsored: { amount: number; side: 'yes' | 'no' | 'sponsor' } | null;
   created_at: string;
 }
@@ -145,6 +147,8 @@ export interface PredictionFeedItem {
   volume: number;
   endDate: string;
   image: string;
+  video_url?: string;
+  video_file_url?: string;
   userVote: 'yes' | 'no' | null;
   yes_pct: number;
   no_pct: number;

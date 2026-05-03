@@ -30,7 +30,7 @@ export default function EventFeed() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [liked, setLiked] = useState<Record<string, boolean>>({});
   const [bookmarked, setBookmarked] = useState<Record<string, boolean>>({});
-  
+
   // Sponsor/Vote Modal
   const [modal, setModal] = useState<FeedEvent | null>(null);
   const [amount, setAmount] = useState('');
@@ -73,7 +73,7 @@ export default function EventFeed() {
       if (video) {
         if (i === currentIndex) {
           video.currentTime = 0;
-          video.play().catch(() => {});
+          video.play().catch(() => { });
         } else {
           video.pause();
         }
@@ -86,14 +86,14 @@ export default function EventFeed() {
     setCurrentIndex(Math.round(e.currentTarget.scrollTop / h));
   };
 
-  const openModal = (item: FeedEvent, defaultSide: 'yes'|'no' = 'yes') => { 
+  const openModal = (item: FeedEvent, defaultSide: 'yes' | 'no' = 'yes') => {
     if (!user) {
       toast.error("Please login to participate");
       return;
     }
-    setModal(item); 
-    setAmount(''); 
-    setSide(defaultSide); 
+    setModal(item);
+    setAmount('');
+    setSide(defaultSide);
   };
 
   const handleConfirm = async () => {
@@ -139,7 +139,7 @@ export default function EventFeed() {
       formData.append('title', createForm.title);
       formData.append('category', createForm.category);
       if (createForm.endDate) formData.append('end_date', createForm.endDate);
-      
+
       if (createFile) {
         if (createFile.type.startsWith('video/')) {
           formData.append('video_file', createFile);
@@ -156,7 +156,7 @@ export default function EventFeed() {
         formData.append('button_label_no', createForm.buttonNo);
         await eventApi.createPrediction(formData);
       }
-      
+
       toast.success('Event created successfully!');
       setCreateModalOpen(false);
       setCreateForm({ title: '', description: '', category: 'Entertainment', endDate: '', buttonYes: 'Vote YES', buttonNo: 'Vote NO' });
@@ -229,14 +229,14 @@ export default function EventFeed() {
               {/* BG / VIDEO */}
               <div className="absolute inset-0" style={{ background: bg }}>
                 {videoSrc ? (
-                   <video 
-                     ref={el => videoRefs.current[idx] = el}
-                     src={videoSrc}
-                     muted={muted}
-                     loop
-                     playsInline
-                     className="absolute inset-0 w-full h-full object-cover opacity-90"
-                   />
+                  <video
+                    ref={el => videoRefs.current[idx] = el}
+                    src={videoSrc}
+                    muted={muted}
+                    loop
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-cover opacity-90"
+                  />
                 ) : d.image ? (
                   <img src={fixUrl(d.image)} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-overlay" />
                 ) : (
@@ -283,19 +283,19 @@ export default function EventFeed() {
                   className="h-11 w-11 rounded-full flex items-center justify-center shadow-lg" style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(10px)' }}>
                   <Share2 className="h-5 w-5 text-white" />
                 </button>
-                
+
                 {videoSrc && (
-                   <button onClick={() => setMuted(!muted)}
-                     className="h-11 w-11 rounded-full flex items-center justify-center shadow-lg mt-2" style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(10px)' }}>
-                     {muted ? <VolumeX className="h-5 w-5 text-white" /> : <Volume2 className="h-5 w-5 text-white" />}
-                   </button>
+                  <button onClick={() => setMuted(!muted)}
+                    className="h-11 w-11 rounded-full flex items-center justify-center shadow-lg mt-2" style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(10px)' }}>
+                    {muted ? <VolumeX className="h-5 w-5 text-white" /> : <Volume2 className="h-5 w-5 text-white" />}
+                  </button>
                 )}
               </div>
 
               {/* Feed position dots */}
               <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col gap-1 z-20 opacity-50">
                 {feed.map((_, i) => (
-                   <div key={i} className={`w-1 rounded-full transition-all ${i === currentIndex ? 'h-3 bg-white' : 'h-1 bg-white/40'}`} />
+                  <div key={i} className={`w-1 rounded-full transition-all ${i === currentIndex ? 'h-3 bg-white' : 'h-1 bg-white/40'}`} />
                 ))}
               </div>
 
@@ -305,14 +305,14 @@ export default function EventFeed() {
                 <div className="flex items-center gap-2 mb-3">
                   <img src={creatorAvatar} alt={creatorName} className="h-10 w-10 rounded-full object-cover border-2 border-white shadow-lg" />
                   <div className="flex flex-col">
-                     <div className="flex items-center gap-1">
-                       <p className="text-white text-sm font-bold leading-none drop-shadow-md">@{creatorUser}</p>
-                       <div className="h-3 w-3 rounded-full bg-blue-500 flex items-center justify-center text-[8px] text-white">✓</div>
-                     </div>
-                     <p className="text-white/80 text-[10px] uppercase font-black tracking-widest mt-0.5 drop-shadow-md">{d.category}</p>
+                    <div className="flex items-center gap-1">
+                      <p className="text-white text-sm font-bold leading-none drop-shadow-md">@{creatorUser}</p>
+                      <div className="h-3 w-3 rounded-full bg-blue-500 flex items-center justify-center text-[8px] text-white">✓</div>
+                    </div>
+                    <p className="text-white/80 text-[10px] uppercase font-black tracking-widest mt-0.5 drop-shadow-md">{d.category}</p>
                   </div>
                 </div>
-                
+
                 {/* Title */}
                 <h2 className="text-white font-black text-2xl leading-tight mb-4 drop-shadow-xl">{d.title}</h2>
 
@@ -324,7 +324,7 @@ export default function EventFeed() {
                       <span className="text-white font-black text-sm">{fmt(pool)}</span>
                     </div>
                     {d.end_date && (
-                       <span className="text-white/40 text-[9px] font-bold uppercase tracking-widest">Ends {d.end_date}</span>
+                      <span className="text-white/40 text-[9px] font-bold uppercase tracking-widest">Ends {d.end_date}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-3 mb-1">
@@ -344,32 +344,32 @@ export default function EventFeed() {
 
                 {/* CTA Buttons */}
                 <div className="flex gap-2">
-                   <button
-                     onClick={() => openModal(item, 'yes')}
-                     className="flex-1 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-95 flex flex-col items-center justify-center leading-none"
-                     style={{
-                       background: 'rgba(34,197,94,0.15)',
-                       border: '1px solid rgba(34,197,94,0.5)',
-                       color: '#4ade80',
-                       backdropFilter: 'blur(8px)'
-                     }}
-                   >
-                     <span className="text-[10px] opacity-70 mb-1">{isChallenge ? 'Yes, they will' : d.buttonLabelYes || 'Vote Yes'}</span>
-                     YES
-                   </button>
-                   <button
-                     onClick={() => openModal(item, 'no')}
-                     className="flex-1 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-95 flex flex-col items-center justify-center leading-none"
-                     style={{
-                       background: 'rgba(239,68,68,0.15)',
-                       border: '1px solid rgba(239,68,68,0.5)',
-                       color: '#f87171',
-                       backdropFilter: 'blur(8px)'
-                     }}
-                   >
-                     <span className="text-[10px] opacity-70 mb-1">{isChallenge ? 'No way' : d.buttonLabelNo || 'Vote No'}</span>
-                     NO
-                   </button>
+                  <button
+                    onClick={() => openModal(item, 'yes')}
+                    className="flex-1 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-95 flex flex-col items-center justify-center leading-none"
+                    style={{
+                      background: 'rgba(34,197,94,0.15)',
+                      border: '1px solid rgba(34,197,94,0.5)',
+                      color: '#4ade80',
+                      backdropFilter: 'blur(8px)'
+                    }}
+                  >
+                    <span className="text-[10px] opacity-70 mb-1">{isChallenge ? 'Yes, they will' : d.buttonLabelYes || 'Vote Yes'}</span>
+                    YES
+                  </button>
+                  <button
+                    onClick={() => openModal(item, 'no')}
+                    className="flex-1 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-95 flex flex-col items-center justify-center leading-none"
+                    style={{
+                      background: 'rgba(239,68,68,0.15)',
+                      border: '1px solid rgba(239,68,68,0.5)',
+                      color: '#f87171',
+                      backdropFilter: 'blur(8px)'
+                    }}
+                  >
+                    <span className="text-[10px] opacity-70 mb-1">{isChallenge ? 'No way' : d.buttonLabelNo || 'Vote No'}</span>
+                    NO
+                  </button>
                 </div>
               </div>
             </div>
@@ -416,7 +416,7 @@ export default function EventFeed() {
             onClick={(e) => e.target === e.currentTarget && setCreateModalOpen(false)}>
             <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }}
               className="w-full rounded-t-[32px] bg-[#09090b] border-t border-white/10 flex flex-col max-h-[90vh]">
-              
+
               <div className="flex items-center justify-between p-6 pb-2 border-b border-white/5">
                 <h3 className="text-xl font-black text-white tracking-tight">Create Event</h3>
                 <button onClick={() => setCreateModalOpen(false)} className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition">
@@ -426,74 +426,74 @@ export default function EventFeed() {
 
               {/* Tabs */}
               <div className="flex p-4 gap-2">
-                 <button onClick={() => setCreateTab('challenge')} className={cn("flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition", createTab === 'challenge' ? "bg-blue-600 text-white" : "bg-white/5 text-white/50")}>⚡ Challenge</button>
-                 <button onClick={() => setCreateTab('prediction')} className={cn("flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition", createTab === 'prediction' ? "bg-orange-600 text-white" : "bg-white/5 text-white/50")}>🔮 Prediction</button>
+                <button onClick={() => setCreateTab('challenge')} className={cn("flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition", createTab === 'challenge' ? "bg-blue-600 text-white" : "bg-white/5 text-white/50")}>⚡ Challenge</button>
+                <button onClick={() => setCreateTab('prediction')} className={cn("flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition", createTab === 'prediction' ? "bg-orange-600 text-white" : "bg-white/5 text-white/50")}>🔮 Prediction</button>
               </div>
 
               <div className="p-6 overflow-y-auto space-y-5 flex-1 custom-scrollbar">
-                 <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-white/50 uppercase tracking-widest">Title</label>
-                    <input type="text" value={createForm.title} onChange={e => setCreateForm(p=>({...p, title: e.target.value}))} placeholder={createTab === 'challenge' ? "e.g. I will do 100 pushups non-stop" : "e.g. Will Bitcoin hit $100k by Dec?"} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-blue-500 transition" />
-                 </div>
-                 
-                 {createTab === 'challenge' && (
-                   <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-white/50 uppercase tracking-widest">Description</label>
-                      <textarea value={createForm.description} onChange={e => setCreateForm(p=>({...p, description: e.target.value}))} rows={3} placeholder="Provide details about the challenge..." className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-blue-500 transition resize-none" />
-                   </div>
-                 )}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-white/50 uppercase tracking-widest">Title</label>
+                  <input type="text" value={createForm.title} onChange={e => setCreateForm(p => ({ ...p, title: e.target.value }))} placeholder={createTab === 'challenge' ? "e.g. I will do 100 pushups non-stop" : "e.g. Will Bitcoin hit $100k by Dec?"} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-blue-500 transition" />
+                </div>
 
-                 <div className="grid grid-cols-2 gap-4">
+                {createTab === 'challenge' && (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-white/50 uppercase tracking-widest">Description</label>
+                    <textarea value={createForm.description} onChange={e => setCreateForm(p => ({ ...p, description: e.target.value }))} rows={3} placeholder="Provide details about the challenge..." className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-blue-500 transition resize-none" />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-white/50 uppercase tracking-widest">Category</label>
+                    <select value={createForm.category} onChange={e => setCreateForm(p => ({ ...p, category: e.target.value }))} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none appearance-none">
+                      {CATEGORIES.map(c => <option key={c} value={c} className="bg-zinc-900">{c}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-white/50 uppercase tracking-widest">End Date (optional)</label>
+                    <input type="text" value={createForm.endDate} onChange={e => setCreateForm(p => ({ ...p, endDate: e.target.value }))} placeholder="e.g. Dec 31, 2026" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-blue-500 transition" />
+                  </div>
+                </div>
+
+                {createTab === 'prediction' && (
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                       <label className="text-[10px] font-black text-white/50 uppercase tracking-widest">Category</label>
-                       <select value={createForm.category} onChange={e => setCreateForm(p=>({...p, category: e.target.value}))} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none appearance-none">
-                         {CATEGORIES.map(c => <option key={c} value={c} className="bg-zinc-900">{c}</option>)}
-                       </select>
+                      <label className="text-[10px] font-black text-white/50 uppercase tracking-widest">YES Label</label>
+                      <input type="text" value={createForm.buttonYes} onChange={e => setCreateForm(p => ({ ...p, buttonYes: e.target.value }))} className="w-full bg-white/5 border border-green-500/30 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-green-500 transition" />
                     </div>
                     <div className="space-y-1.5">
-                       <label className="text-[10px] font-black text-white/50 uppercase tracking-widest">End Date (optional)</label>
-                       <input type="text" value={createForm.endDate} onChange={e => setCreateForm(p=>({...p, endDate: e.target.value}))} placeholder="e.g. Dec 31, 2026" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-blue-500 transition" />
+                      <label className="text-[10px] font-black text-white/50 uppercase tracking-widest">NO Label</label>
+                      <input type="text" value={createForm.buttonNo} onChange={e => setCreateForm(p => ({ ...p, buttonNo: e.target.value }))} className="w-full bg-white/5 border border-red-500/30 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-red-500 transition" />
                     </div>
-                 </div>
+                  </div>
+                )}
 
-                 {createTab === 'prediction' && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                         <label className="text-[10px] font-black text-white/50 uppercase tracking-widest">YES Label</label>
-                         <input type="text" value={createForm.buttonYes} onChange={e => setCreateForm(p=>({...p, buttonYes: e.target.value}))} className="w-full bg-white/5 border border-green-500/30 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-green-500 transition" />
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-white/50 uppercase tracking-widest">Media (Video / Image)</label>
+                  <label className="flex flex-col items-center justify-center w-full h-32 bg-white/5 border-2 border-dashed border-white/20 rounded-xl cursor-pointer hover:bg-white/10 transition relative overflow-hidden">
+                    {createFilePreview ? (
+                      createFile?.type.startsWith('video/') ? (
+                        <video src={createFilePreview} className="absolute inset-0 w-full h-full object-cover opacity-50" />
+                      ) : (
+                        <img src={createFilePreview} className="absolute inset-0 w-full h-full object-cover opacity-50" />
+                      )
+                    ) : (
+                      <div className="flex flex-col items-center">
+                        <UploadCloud className="h-8 w-8 text-white/40 mb-2" />
+                        <span className="text-xs font-bold text-white/60">Upload Video or Image</span>
                       </div>
-                      <div className="space-y-1.5">
-                         <label className="text-[10px] font-black text-white/50 uppercase tracking-widest">NO Label</label>
-                         <input type="text" value={createForm.buttonNo} onChange={e => setCreateForm(p=>({...p, buttonNo: e.target.value}))} className="w-full bg-white/5 border border-red-500/30 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-red-500 transition" />
-                      </div>
-                    </div>
-                 )}
-
-                 <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-white/50 uppercase tracking-widest">Media (Video / Image)</label>
-                    <label className="flex flex-col items-center justify-center w-full h-32 bg-white/5 border-2 border-dashed border-white/20 rounded-xl cursor-pointer hover:bg-white/10 transition relative overflow-hidden">
-                       {createFilePreview ? (
-                          createFile?.type.startsWith('video/') ? (
-                             <video src={createFilePreview} className="absolute inset-0 w-full h-full object-cover opacity-50" />
-                          ) : (
-                             <img src={createFilePreview} className="absolute inset-0 w-full h-full object-cover opacity-50" />
-                          )
-                       ) : (
-                          <div className="flex flex-col items-center">
-                            <UploadCloud className="h-8 w-8 text-white/40 mb-2" />
-                            <span className="text-xs font-bold text-white/60">Upload Video or Image</span>
-                          </div>
-                       )}
-                       <input type="file" accept="video/*,image/*" className="hidden" onChange={handleFileChange} />
-                    </label>
-                 </div>
+                    )}
+                    <input type="file" accept="video/*,image/*" className="hidden" onChange={handleFileChange} />
+                  </label>
+                </div>
               </div>
 
               <div className="p-6 border-t border-white/5">
-                 <button onClick={handleCreateSubmit} disabled={createSubmitting} className="w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50 text-white"
-                   style={{ background: createTab === 'challenge' ? 'linear-gradient(135deg,#2563eb,#00f3ff)' : 'linear-gradient(135deg,#ea580c,#f59e0b)' }}>
-                   {createSubmitting ? 'Creating...' : `Publish ${createTab}`}
-                 </button>
+                <button onClick={handleCreateSubmit} disabled={createSubmitting} className="w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50 text-white"
+                  style={{ background: createTab === 'challenge' ? 'linear-gradient(135deg,#2563eb,#00f3ff)' : 'linear-gradient(135deg,#ea580c,#f59e0b)' }}>
+                  {createSubmitting ? 'Creating...' : `Publish ${createTab}`}
+                </button>
               </div>
             </motion.div>
           </motion.div>
@@ -551,7 +551,7 @@ export default function EventFeed() {
                         border: side === s ? (s === 'yes' ? '2px solid #22c55e' : '2px solid #ef4444') : '2px solid transparent',
                         color: side === s ? (s === 'yes' ? '#4ade80' : '#f87171') : 'rgba(255,255,255,0.5)',
                       }}>
-                      <div className={cn("w-3 h-3 rounded-full border-2", side===s ? (s==='yes'?'border-green-400 bg-green-400':'border-red-400 bg-red-400') : "border-white/20")} />
+                      <div className={cn("w-3 h-3 rounded-full border-2", side === s ? (s === 'yes' ? 'border-green-400 bg-green-400' : 'border-red-400 bg-red-400') : "border-white/20")} />
                       {s === 'yes' ? 'YES' : 'NO'}
                     </button>
                   ))}
@@ -561,8 +561,8 @@ export default function EventFeed() {
               {/* Amount input */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                   <p className="text-white/50 text-[10px] font-black uppercase tracking-widest">Amount (USD)</p>
-                   <p className="text-white/40 text-[10px] font-bold">Balance: {fmt(user?.balance || 0)}</p>
+                  <p className="text-white/50 text-[10px] font-black uppercase tracking-widest">Amount (USD)</p>
+                  <p className="text-white/40 text-[10px] font-bold">Balance: {fmt(user?.balance || 0)}</p>
                 </div>
                 <div className="relative mb-3">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50 font-black text-xl">$</span>
@@ -573,14 +573,14 @@ export default function EventFeed() {
                     style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
                   />
                 </div>
-                
+
                 {/* Quick amounts */}
                 <div className="flex gap-2">
-                   {QUICK_AMOUNTS.map(amt => (
-                      <button key={amt} onClick={() => setAmount(amt.toString())} className="flex-1 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-black transition border border-white/5">
-                        +${amt}
-                      </button>
-                   ))}
+                  {QUICK_AMOUNTS.map(amt => (
+                    <button key={amt} onClick={() => setAmount(amt.toString())} className="flex-1 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-black transition border border-white/5">
+                      +${amt}
+                    </button>
+                  ))}
                 </div>
               </div>
 

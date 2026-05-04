@@ -52,10 +52,18 @@ api.interceptors.request.use(
   }
 );
 
-// Handle 401 — clear token and redirect to login
+// Handle HTML error pages and 401 Unauthorized
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // Prevent raw Nginx HTML error pages (e.g. 502 Bad Gateway) from reaching the UI
+    if (error.response && typeof error.response.data === 'string') {
+      const dataStr = error.response.data.trim().toLowerCase();
+      if (dataStr.startsWith('<html') || dataStr.startsWith('<!doctype')) {
+        error.response.data = `Server Error (${error.response.status}). The backend service is currently down or unreachable.`;
+      }
+    }
+
     if (error.response?.status === 401) {
       const hasToken = !!localStorage.getItem('auth_token');
       if (hasToken) {

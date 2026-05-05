@@ -96,13 +96,9 @@ export const eventApi = {
 
   /** Create a new challenge event */
   createChallenge: (formData: FormData) =>
-    api.post<ChallengeEvent>('/events/challenges/', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+    api.post<ChallengeEvent>('/events/challenges/', formData),
 
   /** Create a new prediction market */
   createPrediction: (formData: FormData) =>
-    api.post('/markets/', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+    api.post('/markets/', formData),
 };

@@ -322,11 +322,7 @@ const Studio = () => {
         });
         navigate('/events');
       } else {
-        await api.post('/videos/upload/', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          }
-        });
+        await api.post('/videos/upload/', formData);
         
         toast.success("VIDEO UPLOADED", { 
           description: "Your video has been successfully uploaded to the platform." 
